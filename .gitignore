@@ -1,0 +1,19 @@
+# Ignorar datasets
+data/
+models/
+
+# Ignorar archivos temporales de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignorar checkpoints de Jupyter
+.ipynb_checkpoints/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar entornos virtuales
+.venv/
+venv/
