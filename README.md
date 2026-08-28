@@ -68,54 +68,41 @@ Se guardan en un CSV y son la entrada del Random Forest.
 
 ## 3. Modelos planteados
 
-| Modelo | Entrada | Idea | Accuracy test | Recall melanoma |
+| Modelo | Qué mira | Idea | Aciertos (test) | Melanomas detectados |
 |---|---|---|---|---|
-| Random Forest | 5 métricas de forma | baseline interpretable (regla ABCD) | 0.72 | 0.65 |
-| **ZoomNet** | imagen RGB con zoom | CNN que ve la lesión y su entorno | **0.89** | 0.86 |
-| **SimpleNet** | lesión segmentada | CNN ligera, solo la lesión | 0.81 | 0.70 |
+| Random Forest | las 5 medidas de forma | punto de partida, fácil de interpretar | 72 % | 65 % |
+| **ZoomNet** | la foto entera del lunar | red neuronal que ve la lesión y la piel de alrededor | **89 %** | 86 % |
+| **SimpleNet** | solo el lunar recortado | red neuronal más pequeña | 81 % | 70 % |
 
-Esquema general de las dos CNN: bloques de convolución + pooling para extraer
-características y capas densas + softmax para clasificar. ZoomNet y SimpleNet
-varían el número de bloques y la capa final, como se detalla abajo.
+Las dos redes tienen la misma idea: varias capas que van detectando patrones cada
+vez más complejos en la imagen y, al final, deciden entre benigno y melanoma.
+ZoomNet es más grande; SimpleNet, más pequeña.
 
-![Arquitectura de la red CNN](docs/img/arquitectura_cnn.jpg)
+![Arquitectura de la red](docs/img/arquitectura_cnn.jpg)
 
 ### 3.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
 
-Modelo clásico entrenado **solo con los cinco descriptores morfológicos**, sin ver
-la imagen. Sirve para medir cuánta información diagnóstica hay en la pura forma del
-lunar.
+Solo usa los cinco números de forma del lunar, sin mirar la imagen. Sirve para ver
+cuánto se puede acertar únicamente con la forma.
 
-- `RandomForestClassifier(n_estimators=400, max_depth=10, random_state=42)`.
-- Antes se hace un análisis exploratorio de cada descriptor por clase
-  (`exploration/00_features.ipynb`): las lesiones malignas tienden a ser menos
-  circulares y menos simétricas.
+Antes se comparan esas medidas entre lesiones benignas y malignas
+(`exploration/00_features.ipynb`): las malignas suelen ser menos redondas y menos
+simétricas.
 
-| Importancia de variables | Matriz de confusión (test) |
+| Peso de cada medida | Aciertos y fallos (test) |
 |---|---|
 | <img src="docs/img/rf_feature_importance.png" width="420"> | <img src="docs/img/rf_confusion.png" width="360"> |
 
-Las variables más influyentes son **perímetro, circularidad y área**. El modelo
-llega a 0.72 de accuracy: la forma aporta señal, pero se queda corta (deja pasar
-el 35 % de los melanomas).
+Acierta el **72 %**. Las medidas que más pesan son el perímetro, la circularidad y
+el área. Se queda corto: no detecta 35 de cada 100 melanomas.
 
-### 3.2. ZoomNet: CNN sobre la imagen RGB (`notebooks/01_rgb_grad_cam.ipynb`)
+### 3.2. ZoomNet: red sobre la foto completa (`notebooks/01_rgb_grad_cam.ipynb`)
 
-CNN entrenada desde cero sobre la imagen **RGB con zoom** (224×224×3). Ve la lesión
-**y la piel de alrededor**.
+Mira la foto entera del lunar (a color), con la piel de alrededor. Es la red más
+grande de las dos. Se entrena hasta que deja de mejorar (para sola en la
+época 23).
 
-```
-Entrada 224x224x3
- → 4 x [Conv2D(3x3, ReLU, padding same) + MaxPooling2D(2x2)]   filtros 32, 64, 128, 256
- → Dropout(0.2)
- → Flatten → Dense(256, ReLU, L2=1e-3) → Dropout(0.5)
- → Dense(2, softmax)
-```
-
-Optimizador Adam (lr 1e-3), `categorical_crossentropy`, con `EarlyStopping` y
-`ReduceLROnPlateau` (se detiene sobre la época 23).
-
-**Curvas de entrenamiento y validación** (salida directa del notebook):
+**Curvas de entrenamiento** (salen del notebook):
 
 ![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
 
@@ -123,60 +110,47 @@ Optimizador Adam (lr 1e-3), `categorical_crossentropy`, con `EarlyStopping` y
 
 <img src="docs/img/zoomnet_roc.png" width="360">
 
-Es el **mejor modelo en test interno**: accuracy 0.89 y AUC 0.958, con curvas de
-entrenamiento y validación que van juntas. Esa ventaja, sin embargo, no se
-mantiene con imágenes de otra fuente (sección 4).
+Es la que **mejor acierta en el test interno**: 89 %, con las curvas de
+entrenamiento y validación juntas (no memoriza). Pero esa ventaja no se mantiene
+con imágenes de otro origen (sección 4).
 
-**Grad-CAM.** Para comprobar en qué se fija la red se generan mapas de calor sobre
-la última capa convolucional. La red se centra en el borde y el interior de la
-lesión, no en el fondo:
+**Grad-CAM.** Estos mapas de calor muestran en qué parte de la imagen se fija la
+red para decidir. Se centra en el borde y el interior del lunar, no en el fondo:
 
 <img src="docs/img/zoomnet_gradcam.jpg" width="760">
 
-### 3.3. SimpleNet: CNN sobre la lesión segmentada (`notebooks/02_simpleNet.ipynb`)
+### 3.3. SimpleNet: red sobre el lunar recortado (`notebooks/02_simpleNet.ipynb`)
 
-CNN **ligera** entrenada sobre la **lesión ya segmentada** (fondo negro), para que
-no pueda aprender ruido del entorno.
+Solo ve el lunar ya recortado, sin la piel de alrededor, para que no pueda
+fijarse en cosas que no son la lesión. Es más pequeña que ZoomNet.
 
-```
-Entrada 224x224x3
- → Conv2D(32) + MaxPooling2D
- → Conv2D(64) + MaxPooling2D
- → Conv2D(128) → GlobalAveragePooling2D
- → Dense(128, ReLU, L2=1e-4) → Dropout(0.4)
- → Dense(2, softmax)
-```
-
-`GlobalAveragePooling` en lugar de `Flatten` reduce mucho los parámetros. Adam
-(lr 1e-4), `EarlyStopping(patience=10)`, 40 épocas máximas.
-
-**Curvas de entrenamiento y validación** (salida directa del notebook):
+**Curvas de entrenamiento** (salen del notebook):
 
 ![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
 
-Accuracy 0.81 en test interno, por debajo de ZoomNet, pero con curvas **muy
-estables y paralelas**, sin sobreajuste. El notebook incluye también su curva ROC
-y su AUC (celda "Curva ROC").
+Acierta el **81 %** en el test interno, algo menos que ZoomNet, pero sus curvas
+son muy estables. El notebook calcula también su curva ROC.
 
 ---
 
 ## 4. Evaluación en datos externos (ISIC)
 
-Prueba sobre 45 imágenes de ISIC, una fuente distinta a la de entrenamiento.
+Prueba con 45 imágenes de ISIC, un origen distinto al de entrenamiento.
 
-| Modelo | Accuracy externo | Recall melanoma | Recall benigno |
+| Modelo | Aciertos | Melanomas detectados | Benignos bien clasificados |
 |---|---|---|---|
-| ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
-| SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
+| ZoomNet | 58 % | 91 % (21/23) | **23 % (5/22)** |
+| SimpleNet | **71 %** | 83 % (19/23) | 59 % (13/22) |
 
 | ZoomNet (externo) | SimpleNet (externo) |
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
-ZoomNet, el mejor en test interno, cae a 0.58 y se sesga hacia "maligno" (solo
-acierta 5 de 22 benignas): ve la imagen completa y aprende pistas propias de la
-fuente de entrenamiento. SimpleNet, que solo ve la lesión segmentada, se mantiene
-equilibrado (0.71) con datos nuevos.
+ZoomNet, la mejor en el test interno, baja al 58 % y casi siempre dice "melanoma"
+(solo acierta 5 de 22 lunares benignos): al ver la imagen entera, se ha
+acostumbrado a detalles propios de las fotos con las que se entrenó. SimpleNet,
+que solo ve el lunar recortado, se mantiene equilibrada (71 %) con imágenes
+nuevas.
 
 ---
 
@@ -184,30 +158,28 @@ equilibrado (0.71) con datos nuevos.
 
 Se despliega **SimpleNet** en la demo [DermaScan](https://huggingface.co/spaces/Martinagg/DermaScan):
 
-- **Generaliza mejor.** Sube de 0.58 (ZoomNet) a 0.71 de accuracy en el conjunto
-  externo, y sin colapsar hacia una sola clase.
-- **Entrenamiento estable.** Curvas de entrenamiento y validación paralelas, sin
-  sobreajuste.
-- **Ligera.** Menos parámetros gracias al `GlobalAveragePooling`, lo que facilita
-  la inferencia en la demo y en el dispositivo futuro.
+- **Funciona mejor con imágenes nuevas.** Pasa de 58 % (ZoomNet) a 71 % de
+  aciertos en el conjunto externo, y sin decantarse siempre por la misma clase.
+- **Entrenamiento estable**, sin memorizar los datos.
+- **Es más ligera**, lo que facilita usarla en la demo y en el dispositivo futuro.
 
-ZoomNet y el Random Forest se conservan en el repositorio como parte de la
-comparación: muestran, respectivamente, que las métricas internas pueden engañar
-y que la forma por sí sola no basta.
+ZoomNet y el Random Forest se dejan en el repositorio para la comparación:
+enseñan, cada uno, que acertar en el test interno no garantiza acertar fuera y
+que la forma por sí sola no basta.
 
 ---
 
 ## 6. Estructura del repositorio
 
 ```
-config/              comprobación del entorno y descarga del dataset
-src/preprocessing/   zoom, limpieza, segmentación y cálculo de métricas
-main.py              ejecuta el pipeline sobre una carpeta de imágenes
-exploration/         análisis exploratorio de los descriptores de forma
+config/              comprobación del entorno y descarga de los datos
+src/preprocessing/   zoom, limpieza, recorte del lunar y cálculo de las medidas
+main.py              lanza el preprocesado sobre una carpeta de imágenes
+exploration/         comparación de las medidas de forma entre benignas y malignas
 notebooks/
-  00_rf_metrics.ipynb     Random Forest sobre métricas
-  01_rgb_grad_cam.ipynb   ZoomNet (CNN sobre RGB) + Grad-CAM
-  02_simpleNet.ipynb      SimpleNet (CNN sobre lesión segmentada)
+  00_rf_metrics.ipynb     Random Forest sobre las medidas de forma
+  01_rgb_grad_cam.ipynb   ZoomNet (red sobre la foto completa) + Grad-CAM
+  02_simpleNet.ipynb      SimpleNet (red sobre el lunar recortado)
 reports/             caso de uso clínico y presentación
 docs/img/            figuras usadas en este README
 ```
@@ -222,7 +194,7 @@ pip install -r requirements.txt
 # 1. Descargar el dataset
 #    ejecutar config/01_dowload_data.ipynb
 
-# 2. Generar zoomed/, masks/, lesions/ y los CSV de métricas
+# 2. Generar las imágenes procesadas y el CSV con las medidas
 python main.py
 
 # 3. Entrenar y evaluar
