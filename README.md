@@ -55,11 +55,11 @@ about each axis).
 
 ## 3. Models
 
-Three models, ordered by test accuracy:
-
-- **Random Forest** — input: the 5 shape descriptors — 0.72 accuracy, 0.65 melanoma recall
-- **ZoomNet** — input: the zoomed RGB image — 0.89 accuracy, 0.86 melanoma recall
-- **SimpleNet** — input: the segmented lesion — 0.81 accuracy, 0.70 melanoma recall
+| Model | Input | Test accuracy | Melanoma recall |
+|---|---|---|---|
+| Random Forest | 5 shape descriptors | 0.72 | 0.65 |
+| **ZoomNet** | zoomed RGB image | **0.89** | 0.86 |
+| **SimpleNet** | segmented lesion | 0.81 | 0.70 |
 
 ![CNN architecture overview](docs/img/arquitectura_cnn.jpg)
 
@@ -112,8 +112,10 @@ To check whether the networks learned something useful beyond the training set,
 they are tested on 45 images from the ISIC archive, taken with different devices
 and under different conditions.
 
-- **ZoomNet** — 0.58 accuracy — catches 21 of 23 melanomas but only 5 of 22 benign lesions
-- **SimpleNet** — 0.71 accuracy — 19 of 23 melanomas, 13 of 22 benign lesions
+| Model | Accuracy | Melanoma recall | Benign recall |
+|---|---|---|---|
+| ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
+| SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
 
 <img src="docs/img/zoomnet_confusion_externo.png" width="380">
 
