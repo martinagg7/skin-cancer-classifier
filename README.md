@@ -17,11 +17,10 @@ You upload a photo of the lesion and it returns the probability of melanoma.
 
 Dermoscopic images labeled as benign (`Benign`) or melanoma (`Malignant`).
 
-| Set | Images | Source | Use |
-|---|---|---|---|
-| Training | ~11,900 | downloaded by `config/01_dowload_data.ipynb` | fitting the models |
-| Test | 2,000 (1,000 per class) | same source | evaluation; also used for validation during training |
-| External | 45 (22 benign / 23 malignant) | public **ISIC** archive | check generalization to another source |
+Training uses about 11,900 images, with a balanced test set of 2,000 (1,000 per
+class); both are downloaded by `config/01_dowload_data.ipynb`, and the test set
+also acts as validation during training. Generalization is checked on a separate
+set of 45 images (22 benign, 23 malignant) from the public **ISIC** archive.
 
 The `data/` and `models/` folders are not committed.
 
@@ -56,11 +55,11 @@ about each axis).
 
 ## 3. Models
 
-| Model | Input | Test accuracy | Melanoma recall |
-|---|---|---|---|
-| Random Forest | 5 shape descriptors | 0.72 | 0.65 |
-| **ZoomNet** | zoomed RGB image | **0.89** | 0.86 |
-| **SimpleNet** | segmented lesion | 0.81 | 0.70 |
+Three models, ordered by test accuracy:
+
+- **Random Forest** — input: the 5 shape descriptors — 0.72 accuracy, 0.65 melanoma recall
+- **ZoomNet** — input: the zoomed RGB image — 0.89 accuracy, 0.86 melanoma recall
+- **SimpleNet** — input: the segmented lesion — 0.81 accuracy, 0.70 melanoma recall
 
 ![CNN architecture overview](docs/img/arquitectura_cnn.jpg)
 
@@ -71,9 +70,9 @@ image. It serves as a baseline and is easy to interpret. In
 `exploration/00_features.ipynb` you can see that malignant lesions tend to be
 less round and less symmetric, though with considerable overlap.
 
-| Feature importance | Confusion matrix (test) |
-|---|---|
-| <img src="docs/img/rf_feature_importance.png" width="410"> | <img src="docs/img/rf_confusion.png" width="360"> |
+<img src="docs/img/rf_feature_importance.png" width="440">
+
+<img src="docs/img/rf_confusion.png" width="380">
 
 It reaches 0.72. Perimeter, circularity and area weigh the most. Shape alone is
 not enough: it misses one in three melanomas.
@@ -113,14 +112,12 @@ To check whether the networks learned something useful beyond the training set,
 they are tested on 45 images from the ISIC archive, taken with different devices
 and under different conditions.
 
-| Model | Accuracy | Melanoma recall | Benign recall |
-|---|---|---|---|
-| ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
-| SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
+- **ZoomNet** — 0.58 accuracy — catches 21 of 23 melanomas but only 5 of 22 benign lesions
+- **SimpleNet** — 0.71 accuracy — 19 of 23 melanomas, 13 of 22 benign lesions
 
-| ZoomNet (external) | SimpleNet (external) |
-|---|---|
-| <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
+<img src="docs/img/zoomnet_confusion_externo.png" width="380">
+
+<img src="docs/img/simplenet_confusion_externo.png" width="360">
 
 ZoomNet collapses to 0.58 and labels almost everything "malignant" (only 5 of 22
 benign lesions correct): trained on the full image, it learned traits specific to
