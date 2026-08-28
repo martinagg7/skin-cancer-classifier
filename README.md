@@ -1,213 +1,120 @@
 # Detección de Melanomas
 
-El melanoma es el cáncer de piel más agresivo y difícil de detectar a simple
-vista. Los dermatólogos usan la regla **ABCD** (Asimetría, Bordes, Color,
-Diámetro), pero aun así hay melanomas que pasan desapercibidos.
-
-Este proyecto clasifica lesiones de la piel en **benignas** o **melanoma** a
-partir de imágenes dermatoscópicas.
+El melanoma es el cáncer de piel más grave y difícil de ver a simple vista. Este
+proyecto clasifica lunares en **benignos** o **melanoma** a partir de fotos
+dermatoscópicas.
 
 ## Prueba la aplicación
 
-Está desplegada en Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
+Está en Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
 
-Subes una foto de la lesión y devuelve la probabilidad de melanoma.
-
----
-
-## 1. Datos
-
-Imágenes dermatoscópicas etiquetadas como benignas (`Benign`) o melanoma
-(`Malignant`).
-
-| Conjunto | Imágenes | De dónde salen | Para qué |
-|---|---|---|---|
-| Entrenamiento | ~11.900 | se descargan con `config/01_dowload_data.ipynb` | ajustar los modelos |
-| Test | 2.000 (1.000 por clase) | misma fuente | evaluar y validar durante el entrenamiento |
-| Externo | 45 (22 benignas / 23 malignas) | archivo público **ISIC** | comprobar si funcionan con imágenes de otro origen |
-
-Las carpetas `data/` y `models/` no se suben al repositorio.
+Subes una foto del lunar y te dice la probabilidad de melanoma.
 
 ---
 
-## 2. Preprocesado y características
+## Datos
 
-Todo el preprocesado está en `src/preprocessing/` y se lanza con `python main.py`.
+Fotos de lunares etiquetadas como benignas o melanoma.
 
-![Pipeline de análisis](docs/img/slide_pipeline.jpg)
+- **Entrenamiento y test:** ~11.900 y 2.000 imágenes (se descargan con `config/01_dowload_data.ipynb`).
+- **Prueba externa:** 45 imágenes del archivo público ISIC, para ver si funciona con fotos de otro origen.
 
-| Paso | Qué hace | Por qué |
+---
+
+## Preprocesado
+
+Cada foto se limpia y se recorta el lunar antes de entrenar
+(`src/preprocessing/`, se lanza con `python main.py`):
+
+![Pipeline](docs/img/slide_pipeline.jpg)
+
+1. Zoom al centro y quitar los pelos.
+2. Resaltar la zona con pigmento.
+3. Separar el lunar del fondo.
+
+De la silueta del lunar se sacan 5 medidas de forma (área, perímetro, lo redondo
+que es y dos de simetría), inspiradas en la regla ABCD.
+
+---
+
+## Modelos
+
+| Modelo | Qué mira | Aciertos (test) |
 |---|---|---|
-| **Zoom + limpieza** | recorte central al 90 % y eliminación de pelos (black-hat + `inpaint`) | centra la lesión y quita bordes del dermatoscopio y vello que la tapan |
-| **Espacio HSV** | se coge el canal de saturación (S) y se suaviza | marca bien la zona con pigmento aunque la imagen tenga ruido |
-| **Máscara final** | umbral de Otsu, se coge la mancha central y se rellenan huecos | separa la lesión del fondo |
-
-De aquí salen tres versiones de cada imagen, cada una para un modelo:
-
-| Salida | Qué es | La usa |
-|---|---|---|
-| `zoomed/` | imagen a color recortada | ZoomNet |
-| `masks/` | silueta del lunar en blanco y negro | Random Forest (a través de las medidas) |
-| `lesions/` | el lunar recortado sobre fondo negro | SimpleNet |
-
-### Características de forma
-
-De la silueta del lunar se calculan cinco números, inspirados en la regla ABCD:
-
-| Característica | Qué mide |
-|---|---|
-| Área | tamaño del lunar (en píxeles) |
-| Perímetro | longitud del borde; es mayor cuando el borde es irregular |
-| Circularidad (`4·π·A / P²`) | cómo de redondo es (1 = círculo perfecto) |
-| Simetría vertical | parecido entre la mitad izquierda y la derecha |
-| Simetría horizontal | parecido entre la mitad de arriba y la de abajo |
-
-Se guardan en un CSV y son la entrada del Random Forest.
-
----
-
-## 3. Modelos planteados
-
-| Modelo | Qué mira | Idea | Aciertos (test) | Melanomas detectados |
-|---|---|---|---|---|
-| Random Forest | las 5 medidas de forma | punto de partida, fácil de interpretar | 72 % | 65 % |
-| **ZoomNet** | la foto entera del lunar | red neuronal que ve la lesión y la piel de alrededor | **89 %** | 86 % |
-| **SimpleNet** | solo el lunar recortado | red neuronal más pequeña | 81 % | 70 % |
-
-Las dos redes tienen la misma idea: varias capas que van detectando patrones cada
-vez más complejos en la imagen y, al final, deciden entre benigno y melanoma.
-ZoomNet es más grande; SimpleNet, más pequeña.
+| Random Forest | solo las 5 medidas de forma | 72 % |
+| ZoomNet | la foto entera del lunar | 89 % |
+| SimpleNet | solo el lunar recortado | 81 % |
 
 ![Arquitectura de la red](docs/img/arquitectura_cnn.jpg)
 
-### 3.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
+**Random Forest** (`notebooks/00_rf_metrics.ipynb`): modelo sencillo que solo usa
+los números de forma, sin mirar la imagen. Sirve de referencia. Lo que más pesa
+es el perímetro, la circularidad y el área.
 
-Solo usa los cinco números de forma del lunar, sin mirar la imagen. Sirve para ver
-cuánto se puede acertar únicamente con la forma.
+<img src="docs/img/rf_feature_importance.png" width="420">
 
-Antes se comparan esas medidas entre lesiones benignas y malignas
-(`exploration/00_features.ipynb`): las malignas suelen ser menos redondas y menos
-simétricas.
+**ZoomNet** (`notebooks/01_rgb_grad_cam.ipynb`): red neuronal grande que mira la
+foto completa, con la piel de alrededor. Es la que mejor acierta en el test.
 
-| Peso de cada medida | Aciertos y fallos (test) |
-|---|---|
-| <img src="docs/img/rf_feature_importance.png" width="420"> | <img src="docs/img/rf_confusion.png" width="360"> |
+![Curvas ZoomNet](docs/img/zoomnet_curvas.png)
 
-Acierta el **72 %**. Las medidas que más pesan son el perímetro, la circularidad y
-el área. Se queda corto: no detecta 35 de cada 100 melanomas.
+Los mapas de calor (Grad-CAM) confirman que se fija en el lunar, no en el fondo:
 
-### 3.2. ZoomNet: red sobre la foto completa (`notebooks/01_rgb_grad_cam.ipynb`)
+![Grad-CAM](docs/img/zoomnet_gradcam.jpg)
 
-Mira la foto entera del lunar (a color), con la piel de alrededor. Es la red más
-grande de las dos. Se entrena hasta que deja de mejorar (para sola en la
-época 23).
+**SimpleNet** (`notebooks/02_simpleNet.ipynb`): red más pequeña que solo ve el
+lunar recortado. Acierta un poco menos, pero de forma más estable.
 
-**Curvas de entrenamiento** (salen del notebook):
-
-![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
-
-**Curva ROC (test):**
-
-<img src="docs/img/zoomnet_roc.png" width="360">
-
-Es la que **mejor acierta en el test interno**: 89 %, con las curvas de
-entrenamiento y validación juntas (no memoriza). Pero esa ventaja no se mantiene
-con imágenes de otro origen (sección 4).
-
-**Grad-CAM.** Estos mapas de calor muestran en qué parte de la imagen se fija la
-red para decidir. Se centra en el borde y el interior del lunar, no en el fondo:
-
-<img src="docs/img/zoomnet_gradcam.jpg" width="760">
-
-### 3.3. SimpleNet: red sobre el lunar recortado (`notebooks/02_simpleNet.ipynb`)
-
-Solo ve el lunar ya recortado, sin la piel de alrededor, para que no pueda
-fijarse en cosas que no son la lesión. Es más pequeña que ZoomNet.
-
-**Curvas de entrenamiento** (salen del notebook):
-
-![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
-
-Acierta el **81 %** en el test interno, algo menos que ZoomNet, pero sus curvas
-son muy estables. El notebook calcula también su curva ROC.
+![Curvas SimpleNet](docs/img/simplenet_curvas.png)
 
 ---
 
-## 4. Evaluación en datos externos (ISIC)
-
-Prueba con 45 imágenes de ISIC, un origen distinto al de entrenamiento.
+## Resultado con imágenes nuevas (ISIC)
 
 | Modelo | Aciertos | Melanomas detectados | Benignos bien clasificados |
 |---|---|---|---|
-| ZoomNet | 58 % | 91 % (21/23) | **23 % (5/22)** |
-| SimpleNet | **71 %** | 83 % (19/23) | 59 % (13/22) |
+| ZoomNet | 58 % | 91 % | 23 % |
+| SimpleNet | 71 % | 83 % | 59 % |
 
-| ZoomNet (externo) | SimpleNet (externo) |
+| ZoomNet | SimpleNet |
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
-ZoomNet, la mejor en el test interno, baja al 58 % y casi siempre dice "melanoma"
-(solo acierta 5 de 22 lunares benignos): al ver la imagen entera, se ha
-acostumbrado a detalles propios de las fotos con las que se entrenó. SimpleNet,
-que solo ve el lunar recortado, se mantiene equilibrada (71 %) con imágenes
-nuevas.
+ZoomNet acierta mucho en el test pero falla con imágenes de otro origen: casi
+siempre dice "melanoma". SimpleNet, al ver solo el lunar, aguanta mejor.
+
+**Modelo elegido: SimpleNet** (el que está en la demo). Funciona mejor con
+imágenes nuevas, entrena estable y es ligero.
 
 ---
 
-## 5. Modelo elegido: SimpleNet
-
-Se despliega **SimpleNet** en la demo [DermaScan](https://huggingface.co/spaces/Martinagg/DermaScan):
-
-- **Funciona mejor con imágenes nuevas.** Pasa de 58 % (ZoomNet) a 71 % de
-  aciertos en el conjunto externo, y sin decantarse siempre por la misma clase.
-- **Entrenamiento estable**, sin memorizar los datos.
-- **Es más ligera**, lo que facilita usarla en la demo y en el dispositivo futuro.
-
-ZoomNet y el Random Forest se dejan en el repositorio para la comparación:
-enseñan, cada uno, que acertar en el test interno no garantiza acertar fuera y
-que la forma por sí sola no basta.
-
----
-
-## 6. Estructura del repositorio
+## Estructura
 
 ```
-config/              comprobación del entorno y descarga de los datos
-src/preprocessing/   zoom, limpieza, recorte del lunar y cálculo de las medidas
-main.py              lanza el preprocesado sobre una carpeta de imágenes
-exploration/         comparación de las medidas de forma entre benignas y malignas
-notebooks/
-  00_rf_metrics.ipynb     Random Forest sobre las medidas de forma
-  01_rgb_grad_cam.ipynb   ZoomNet (red sobre la foto completa) + Grad-CAM
-  02_simpleNet.ipynb      SimpleNet (red sobre el lunar recortado)
-reports/             caso de uso clínico y presentación
-docs/img/            figuras usadas en este README
+config/              descarga de los datos
+src/preprocessing/   limpieza y recorte del lunar
+main.py              lanza el preprocesado
+exploration/         comparación de las medidas entre benignas y malignas
+notebooks/           los tres modelos
+reports/             presentación y caso de uso
 ```
 
 ---
 
-## 7. Uso
+## Uso
 
 ```bash
 pip install -r requirements.txt
-
-# 1. Descargar el dataset
-#    ejecutar config/01_dowload_data.ipynb
-
-# 2. Generar las imágenes procesadas y el CSV con las medidas
-python main.py
-
-# 3. Entrenar y evaluar
-#    ejecutar los notebooks de notebooks/ en orden
+# 1. descargar los datos: ejecutar config/01_dowload_data.ipynb
+python main.py                 # 2. preprocesar las imágenes
+# 3. ejecutar los notebooks de notebooks/
 ```
 
 ---
 
-## 8. Trabajo futuro
+## Idea a futuro
 
-Dispositivo portátil basado en Raspberry Pi (cámara y pantalla táctil) que captura
-la lesión, estima la probabilidad de melanoma y sincroniza los resultados con una
-arquitectura en la nube (almacenamiento, inferencia gestionada, base de datos e
-informes) para seguimiento clínico.
+Un aparato portátil (Raspberry Pi con cámara) que hace la foto, calcula la
+probabilidad de melanoma y la envía al médico.
 
-![Aplicación futura y arquitectura](docs/img/slide_futuro.jpg)
+![Aplicación futura](docs/img/slide_futuro.jpg)
