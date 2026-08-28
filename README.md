@@ -73,11 +73,11 @@ CSV.
 
 ## 4. Modelos planteados
 
-| Modelo | Entrada | Idea | Accuracy test | Recall melanoma | AUC |
-|---|---|---|---|---|---|
-| Random Forest | 5 métricas de forma | baseline interpretable (regla ABCD) | 0.72 | 0.65 | — |
-| **ZoomNet** | imagen RGB con zoom | CNN que ve la lesión y su entorno | **0.89** | 0.86 | **0.96** |
-| **SimpleNet** | lesión segmentada | CNN ligera, solo la lesión | 0.81 | 0.70 | — |
+| Modelo | Entrada | Idea | Accuracy test | Recall melanoma |
+|---|---|---|---|---|
+| Random Forest | 5 métricas de forma | baseline interpretable (regla ABCD) | 0.72 | 0.65 |
+| **ZoomNet** | imagen RGB con zoom | CNN que ve la lesión y su entorno | **0.89** | 0.86 |
+| **SimpleNet** | lesión segmentada | CNN ligera, solo la lesión | 0.81 | 0.70 |
 
 Esquema general de las dos CNN: bloques de convolución + pooling para extraer
 características y capas densas + softmax para clasificar. ZoomNet y SimpleNet
@@ -160,7 +160,8 @@ Entrada 224x224x3
 ![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
 
 Accuracy 0.81 en test interno —por debajo de ZoomNet— pero con curvas **muy
-estables y paralelas**, sin sobreajuste.
+estables y paralelas**, sin sobreajuste. El notebook incluye también su curva ROC
+y su AUC (celda "Curva ROC").
 
 ---
 
