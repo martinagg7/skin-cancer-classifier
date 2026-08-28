@@ -1,1 +1,249 @@
-# skin-cancer-classifier
+# Detección de Melanomas
+
+Trabajo de Fin de Grado — Universidad Alfonso X el Sabio
+Autora: Martina García González
+
+Clasificación automática de lesiones cutáneas dermatoscópicas en **benigno** vs
+**melanoma**. El proyecto plantea y compara tres modelos —uno clásico basado en
+descriptores de forma y dos redes convolucionales— y despliega el modelo elegido
+como demo interactiva.
+
+**Demo:** https://huggingface.co/spaces/Martinagg/DermaScan
+
+---
+
+## 1. Motivación
+
+El melanoma es el cáncer de piel más agresivo y difícil de identificar a simple
+vista. En dermatología se emplea la regla **ABCD** (Asimetría, Bordes, Color,
+Diámetro) para señalar lesiones sospechosas, pero aun así hay melanomas que pasan
+desapercibidos. Su incidencia crece de forma sostenida, lo que motiva
+herramientas de cribado y seguimiento asistidas por IA.
+
+El objetivo del trabajo es doble:
+
+1. Cuantificar cuánta señal diagnóstica hay en la **forma** de la lesión
+   (enfoque clásico, interpretable).
+2. Entrenar **redes convolucionales** sobre la imagen y estudiar qué
+   representación de entrada generaliza mejor a imágenes nuevas.
+
+---
+
+## 2. Datos
+
+Imágenes dermatoscópicas etiquetadas en dos clases (`Benign`, `Malignant`).
+
+| Conjunto | Imágenes | Uso |
+|---|---|---|
+| Entrenamiento | ~11.900 | ajuste de los modelos |
+| Test interno | 2.000 (1.000 por clase) | evaluación y validación durante el entrenamiento |
+| Externo (ISIC) | 45 (22 benignas / 23 malignas) | prueba de generalización a otra fuente |
+
+El dataset se descarga con `config/01_dowload_data.ipynb`. Las carpetas `data/` y
+`models/` no se versionan.
+
+---
+
+## 3. Pipeline de preprocesado
+
+Todo el preprocesado está en `src/preprocessing/` y se lanza con `python main.py`.
+
+![Pipeline de análisis](docs/img/slide_pipeline.jpg)
+
+| Paso | Qué hace | Por qué |
+|---|---|---|
+| **Zoom + limpieza** | recorte central al 90 % y eliminación de pelos (black-hat + `inpaint`) | centra la lesión y elimina bordes del dermatoscopio y vello que la ocultan |
+| **Espacio HSV** | se toma el canal de saturación (S) y se suaviza | resalta la zona pigmentada con independencia del ruido de la imagen |
+| **Máscara final** | umbral de Otsu, selección de la componente conexa central y relleno de huecos | separa la lesión del fondo |
+
+De aquí salen tres representaciones de cada imagen, cada una alimenta a un modelo
+distinto:
+
+| Salida | Contenido | La usa |
+|---|---|---|
+| `zoomed/` | imagen RGB recortada | ZoomNet |
+| `masks/` | máscara binaria del lunar | Random Forest (vía métricas) |
+| `lesions/` | lesión segmentada sobre fondo negro | SimpleNet |
+
+De la máscara se calculan cinco descriptores de forma —área, perímetro,
+circularidad (`4·π·A / P²`) y simetría vertical y horizontal— que se guardan en un
+CSV.
+
+---
+
+## 4. Modelos planteados
+
+| Modelo | Entrada | Idea | Accuracy test | Recall melanoma | AUC |
+|---|---|---|---|---|---|
+| Random Forest | 5 métricas de forma | baseline interpretable (regla ABCD) | 0.72 | 0.65 | — |
+| **ZoomNet** | imagen RGB con zoom | CNN que ve la lesión y su entorno | **0.89** | 0.86 | **0.96** |
+| **SimpleNet** | lesión segmentada | CNN ligera, solo la lesión | 0.81 | 0.70 | — |
+
+### 4.1. Random Forest — `notebooks/00_rf_metrics.ipynb`
+
+Modelo clásico entrenado **solo con los cinco descriptores morfológicos**, sin ver
+la imagen. Sirve para medir cuánta información diagnóstica hay en la pura forma del
+lunar.
+
+- `RandomForestClassifier(n_estimators=400, max_depth=10, random_state=42)`.
+- Antes se hace un análisis exploratorio de cada descriptor por clase
+  (`exploration/00_features.ipynb`): las lesiones malignas tienden a ser menos
+  circulares y menos simétricas.
+
+<p>
+  <img src="docs/img/feat_circularidad_boxplot.png" width="360">
+  <img src="docs/img/feat_simetria_boxplot.png" width="430">
+</p>
+
+| Importancia de variables | Matriz de confusión (test) |
+|---|---|
+| <img src="docs/img/rf_feature_importance.png" width="420"> | <img src="docs/img/rf_confusion.png" width="360"> |
+
+Las variables más influyentes son **perímetro, circularidad y área**. El modelo
+llega a 0.72 de accuracy: la forma aporta señal, pero se queda corta (deja pasar
+el 35 % de los melanomas).
+
+### 4.2. ZoomNet — CNN sobre la imagen RGB — `notebooks/01_rgb_grad_cam.ipynb`
+
+CNN entrenada desde cero sobre la imagen **RGB con zoom** (224×224×3). Ve la lesión
+**y la piel de alrededor**.
+
+```
+Entrada 224x224x3
+ → 4 x [Conv2D(3x3, ReLU, padding same) + MaxPooling2D(2x2)]   filtros 32, 64, 128, 256
+ → Dropout(0.2)
+ → Flatten → Dense(256, ReLU, L2=1e-3) → Dropout(0.5)
+ → Dense(2, softmax)
+```
+
+Optimizador Adam (lr 1e-3), `categorical_crossentropy`, con `EarlyStopping` y
+`ReduceLROnPlateau` (se detiene sobre la época 23).
+
+**Curvas de entrenamiento y validación** (salida directa del notebook):
+
+![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
+
+| Curva ROC (test) | Matriz de confusión (test) |
+|---|---|
+| <img src="docs/img/zoomnet_roc.png" width="340"> | <img src="docs/img/zoomnet_confusion.png" width="380"> |
+
+Es el **mejor modelo en test interno**: accuracy 0.89 y AUC 0.958, con curvas de
+entrenamiento y validación que van juntas.
+
+**Grad-CAM.** Para comprobar en qué se fija la red se generan mapas de calor sobre
+la última capa convolucional. La red se centra en el borde y el interior de la
+lesión, no en el fondo:
+
+<img src="docs/img/zoomnet_gradcam.jpg" width="760">
+
+### 4.3. SimpleNet — CNN sobre la lesión segmentada — `notebooks/02_simpleNet.ipynb`
+
+CNN **ligera** entrenada sobre la **lesión ya segmentada** (fondo negro), para que
+no pueda aprender ruido del entorno.
+
+```
+Entrada 224x224x3
+ → Conv2D(32) + MaxPooling2D
+ → Conv2D(64) + MaxPooling2D
+ → Conv2D(128) → GlobalAveragePooling2D
+ → Dense(128, ReLU, L2=1e-4) → Dropout(0.4)
+ → Dense(2, softmax)
+```
+
+`GlobalAveragePooling` en lugar de `Flatten` reduce mucho los parámetros. Adam
+(lr 1e-4), `EarlyStopping(patience=10)`, 40 épocas máximas.
+
+**Curvas de entrenamiento y validación** (salida directa del notebook):
+
+![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
+
+<img src="docs/img/simplenet_confusion.png" width="380">
+
+Accuracy 0.81 en test interno —por debajo de ZoomNet— pero con curvas **muy
+estables y paralelas**, sin sobreajuste.
+
+---
+
+## 5. Evaluación en datos externos (ISIC)
+
+Cada CNN se prueba sobre 45 imágenes de una fuente distinta a la de entrenamiento.
+Aquí es donde se ven las diferencias reales:
+
+| Modelo | Accuracy externo | Recall melanoma | Recall benigno |
+|---|---|---|---|
+| ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
+| SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
+
+| ZoomNet — externo | SimpleNet — externo |
+|---|---|
+| <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
+
+ZoomNet, que era el mejor en test interno, **se desploma**: clasifica casi todo
+como maligno (solo acierta 5 de 22 lesiones benignas). Su alto recall de melanoma
+externo es engañoso, porque viene de un sesgo hacia "maligno", no de haber
+aprendido a distinguir.
+
+SimpleNet mantiene un comportamiento **equilibrado y consistente** con datos que
+no ha visto.
+
+---
+
+## 6. Modelo elegido: SimpleNet
+
+Se despliega **SimpleNet** en la demo [DermaScan](https://huggingface.co/spaces/Martinagg/DermaScan):
+
+- **Generaliza mejor.** Sube de 0.58 (ZoomNet) a 0.71 de accuracy en el conjunto
+  externo, y sin colapsar hacia una sola clase.
+- **Entrenamiento estable.** Curvas de entrenamiento y validación paralelas, sin
+  sobreajuste.
+- **Ligera.** Menos parámetros gracias al `GlobalAveragePooling`, lo que facilita
+  la inferencia en la demo y en el dispositivo futuro.
+
+ZoomNet y el Random Forest se conservan en el repositorio como parte de la
+comparación: muestran, respectivamente, que las métricas internas pueden engañar
+y que la forma por sí sola no basta.
+
+---
+
+## 7. Estructura del repositorio
+
+```
+config/              comprobación del entorno y descarga del dataset
+src/preprocessing/   zoom, limpieza, segmentación y cálculo de métricas
+main.py              ejecuta el pipeline sobre una carpeta de imágenes
+exploration/         análisis exploratorio de los descriptores de forma
+notebooks/
+  00_rf_metrics.ipynb     Random Forest sobre métricas
+  01_rgb_grad_cam.ipynb   ZoomNet (CNN sobre RGB) + Grad-CAM
+  02_simpleNet.ipynb      SimpleNet (CNN sobre lesión segmentada)
+reports/             caso de uso clínico y presentación
+docs/img/            figuras usadas en este README
+```
+
+---
+
+## 8. Uso
+
+```bash
+pip install -r requirements.txt
+
+# 1. Descargar el dataset
+#    ejecutar config/01_dowload_data.ipynb
+
+# 2. Generar zoomed/, masks/, lesions/ y los CSV de métricas
+python main.py
+
+# 3. Entrenar y evaluar
+#    ejecutar los notebooks de notebooks/ en orden
+```
+
+---
+
+## 9. Trabajo futuro
+
+Dispositivo portátil basado en Raspberry Pi (cámara y pantalla táctil) que captura
+la lesión, estima la probabilidad de melanoma y sincroniza los resultados con una
+arquitectura en la nube (almacenamiento, inferencia gestionada, base de datos e
+informes) para seguimiento clínico.
+
+![Aplicación futura y arquitectura](docs/img/slide_futuro.jpg)
