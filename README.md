@@ -17,12 +17,14 @@ Subes una foto de la lesión y devuelve la probabilidad de melanoma.
 
 ## 1. Objetivo
 
-El proyecto busca dos cosas:
+Comparar dos maneras de decidir si un lunar es benigno o melanoma:
 
-1. Ver cuánta información hay en la **forma** del lunar (enfoque clásico y fácil
-   de interpretar).
-2. Entrenar **redes neuronales** sobre la imagen y comprobar cuál funciona mejor
-   con imágenes nuevas.
+1. **Usando solo la forma del lunar.** Se miden características geométricas (área,
+   perímetro, lo redondo que es, si es simétrico) y un modelo sencillo decide con
+   esos números. Ventaja: se entiende por qué toma cada decisión.
+2. **Usando la imagen completa.** Una red neuronal aprende directamente de las
+   fotos, sin que nadie le diga qué mirar. Se prueban dos redes y se comprueba
+   cuál acierta mejor con imágenes que no ha visto nunca.
 
 ---
 
