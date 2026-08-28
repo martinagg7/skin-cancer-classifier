@@ -1,8 +1,9 @@
 # Detección de Melanomas
 
-Clasificación de lesiones dermatoscópicas en **benignas** o **melanoma**. El
-proyecto compara tres enfoques: descriptores de forma con un modelo clásico y dos
-redes convolucionales con distinta representación de entrada.
+Clasificación de lesiones dermatoscópicas en **benignas** o **melanoma**. Para
+hacerlo se prueban y se comparan tres enfoques: un modelo clásico que trabaja con
+descriptores de la forma de la lesión y dos redes convolucionales que reciben la
+imagen de distinta manera.
 
 ## Prueba la aplicación
 
@@ -23,13 +24,15 @@ Fotos dermatoscópicas etiquetadas como benignas (`Benign`) o melanoma
 | Test | 2.000 (1.000 por clase) | misma fuente | evaluación; también sirve de validación durante el entrenamiento |
 | Externo | 45 (22 benignas / 23 malignas) | archivo público **ISIC** | prueba de generalización a otra fuente |
 
-`data/` y `models/` no se versionan.
+Las carpetas `data/` y `models/` no se suben al repositorio.
 
 ---
 
 ## 2. Preprocesado
 
-Pipeline en `src/preprocessing/`, se lanza con `python main.py`.
+Antes de entrenar, cada imagen pasa por un pipeline de limpieza
+(`src/preprocessing/`, se ejecuta con `python main.py`) cuyo objetivo es quedarse
+solo con la lesión.
 
 ![Pipeline de análisis](docs/img/slide_pipeline.jpg)
 
@@ -39,7 +42,7 @@ Pipeline en `src/preprocessing/`, se lanza con `python main.py`.
 | Canal S (HSV) | se trabaja sobre el canal de saturación, suavizado con Gauss | la zona pigmentada resalta ahí con independencia de sombras y brillos |
 | Segmentación | umbral de Otsu, se elige la componente conexa central y se rellenan huecos | máscara limpia de la lesión |
 
-Salen tres representaciones de cada imagen:
+El resultado son tres versiones de cada imagen, una para cada modelo:
 
 | Carpeta | Contenido | La usa |
 |---|---|---|
@@ -47,8 +50,8 @@ Salen tres representaciones de cada imagen:
 | `masks/` | máscara binaria de la lesión | Random Forest |
 | `lesions/` | lesión segmentada sobre fondo negro | SimpleNet |
 
-De la máscara se extraen cinco descriptores de forma (regla ABCD), entrada del
-Random Forest:
+A partir de la máscara se calculan además cinco descriptores de la forma de la
+lesión, inspirados en la regla ABCD, que son la entrada del Random Forest:
 
 | Descriptor | Definición |
 |---|---|
@@ -71,53 +74,64 @@ Random Forest:
 
 ### 3.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
 
-Random Forest de 400 árboles sobre los cinco descriptores de forma, sin acceso a
-la imagen. Es el baseline interpretable.
+Como punto de partida se entrena un Random Forest de 400 árboles usando solo los
+cinco descriptores de forma, sin darle la imagen. La idea es medir cuánto se
+puede clasificar únicamente con la geometría de la lesión, y hacerlo con un
+modelo que se pueda interpretar.
 
-El análisis previo (`exploration/00_features.ipynb`) muestra que las lesiones
-malignas son, en promedio, menos circulares y menos simétricas.
+Antes de entrenarlo, en `exploration/00_features.ipynb` se comparan los
+descriptores entre clases: las lesiones malignas tienden a ser menos circulares y
+menos simétricas, aunque con bastante solapamiento entre benignas y malignas.
 
 | Importancia de variables | Matriz de confusión (test) |
 |---|---|
 | <img src="docs/img/rf_feature_importance.png" width="410"> | <img src="docs/img/rf_confusion.png" width="360"> |
 
-Accuracy 0.72. Pesan sobre todo perímetro, circularidad y área. La forma aporta
-señal pero insuficiente: se le escapa el 35 % de los melanomas.
+Llega al 0.72 de accuracy. Los descriptores que más pesan son el perímetro, la
+circularidad y el área. La forma aporta información, pero no es suficiente: se le
+escapa uno de cada tres melanomas.
 
 ### 3.2. ZoomNet (`notebooks/01_rgb_grad_cam.ipynb`)
 
-CNN de cuatro bloques convolucionales (32-64-128-256) sobre la imagen RGB con
-zoom. Adam, `EarlyStopping` y `ReduceLROnPlateau` (para en la época 23).
+ZoomNet es una red convolucional de cuatro bloques (32, 64, 128 y 256 filtros)
+que recibe la imagen RGB completa, con la piel de alrededor de la lesión. Se
+entrena con Adam y con early stopping y reducción de learning rate; el
+entrenamiento se detiene en la época 23.
 
 ![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
 
-Entrenamiento y validación van juntas, sin sobreajuste aparente. AUC 0.958.
+Las curvas de entrenamiento y validación evolucionan juntas, sin señales claras
+de sobreajuste, y el AUC en test es 0.958.
 
 <img src="docs/img/zoomnet_roc.png" width="360">
 
-Mejor modelo en test interno (0.89), pero esa ventaja no se sostiene fuera
-(sección 4). Los mapas Grad-CAM confirman que la activación se concentra en el
-borde y el interior de la lesión:
+Es el modelo que mejor clasifica el test interno (0.89), aunque esa ventaja
+desaparece al probarlo con imágenes de otra fuente (sección 4). Los mapas de
+Grad-CAM muestran que la red se apoya sobre todo en el borde y el interior de la
+lesión, no en el fondo:
 
 <img src="docs/img/zoomnet_gradcam.jpg" width="760">
 
 ### 3.3. SimpleNet (`notebooks/02_simpleNet.ipynb`)
 
-CNN más ligera: tres bloques convolucionales y *global average pooling* en lugar
-de `Flatten`, lo que reduce mucho los parámetros. Entra solo la lesión
-segmentada, sin contexto de piel. Adam, `EarlyStopping`.
+SimpleNet es una versión más ligera: tres bloques convolucionales y un *global
+average pooling* en lugar del `Flatten`, con lo que tiene muchos menos
+parámetros. Además recibe solo la lesión ya segmentada, sin la piel de alrededor,
+para que no pueda aprender nada del contexto. Se entrena igual, con Adam y early
+stopping.
 
 ![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
 
-Accuracy 0.81 en test interno, por debajo de ZoomNet, pero con curvas muy
-estables. El notebook calcula también su curva ROC.
+En el test interno alcanza 0.81, algo menos que ZoomNet, pero con unas curvas de
+entrenamiento muy estables. El notebook incluye también su curva ROC.
 
 ---
 
 ## 4. Evaluación externa (ISIC)
 
-Las dos CNN se prueban sobre 45 imágenes de ISIC, distintas en dispositivo,
-iluminación y encuadre.
+Para comprobar si las redes han aprendido algo que sirva más allá del conjunto de
+entrenamiento, se prueban con 45 imágenes del archivo ISIC, tomadas con otros
+equipos y en otras condiciones.
 
 | Modelo | Accuracy | Recall melanoma | Recall benigno |
 |---|---|---|---|
@@ -128,27 +142,30 @@ iluminación y encuadre.
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
-ZoomNet cae a 0.58 y se sesga hacia "maligno" (solo acierta 5 de 22 benignas):
-al ver la imagen completa, aprende también características propias de la fuente de
-entrenamiento. SimpleNet, que solo recibe la lesión segmentada, mantiene un
-comportamiento equilibrado (0.71).
+Aquí ZoomNet cae hasta 0.58 y se vuelve muy sesgada hacia "maligno": solo acierta
+5 de las 22 lesiones benignas. Al haberse entrenado sobre la imagen completa, ha
+acabado fijándose también en rasgos propios de la fuente original. SimpleNet, que
+solo ve la lesión recortada, se comporta de forma mucho más equilibrada y
+mantiene un 0.71.
 
-El conjunto es pequeño (45 imágenes), así que las cifras exactas tienen margen;
-la caída y el sesgo, en cambio, son claros.
+Son solo 45 imágenes, así que los porcentajes concretos hay que tomarlos con
+cautela, pero la caída de ZoomNet y su sesgo hacia una clase se ven con claridad.
 
 ---
 
 ## 5. Modelo elegido: SimpleNet
 
-Es el desplegado en la demo:
+SimpleNet es el modelo que se ha llevado a la demo, por tres motivos:
 
-- Generaliza mejor a la fuente externa (0.71 vs 0.58) sin colapsar a una clase.
-- Entrenamiento estable, sin sobreajuste.
-- Ligero, cómodo para la demo y el dispositivo futuro.
+- Generaliza mejor a la fuente externa (0.71 frente a 0.58) sin decantarse
+  siempre por la misma clase.
+- Entrena de forma estable, sin sobreajuste.
+- Es ligero, lo que facilita usarlo en la demo y en el dispositivo futuro.
 
-Random Forest y ZoomNet quedan en el repositorio como parte de la comparación:
-muestran que la forma sola no basta y que un buen resultado interno puede no
-generalizar.
+Random Forest y ZoomNet se mantienen en el repositorio porque la comparación es
+parte del resultado: dejan claro que la forma de la lesión por sí sola no basta y
+que un buen número en el test interno no garantiza que el modelo funcione con
+datos nuevos.
 
 ---
 
