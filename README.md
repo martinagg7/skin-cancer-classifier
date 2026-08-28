@@ -1,12 +1,13 @@
 # Detección de Melanomas
 
-Trabajo de Fin de Grado — Universidad Alfonso X el Sabio
 Autora: Martina García González
 
-Clasificación automática de lesiones cutáneas dermatoscópicas en **benigno** vs
-**melanoma**. El proyecto plantea y compara tres modelos —uno clásico basado en
-descriptores de forma y dos redes convolucionales— y despliega el modelo elegido
-como demo interactiva.
+Este proyecto clasifica lesiones de la piel en **benignas** o **melanoma** a
+partir de imágenes dermatoscópicas.
+
+Se prueban tres modelos: un modelo clásico que usa medidas de la forma del lunar
+y dos redes neuronales convolucionales (CNN). El mejor de ellos está publicado
+como demo web.
 
 **Demo:** https://huggingface.co/spaces/Martinagg/DermaScan
 
@@ -14,18 +15,16 @@ como demo interactiva.
 
 ## 1. Motivación
 
-El melanoma es el cáncer de piel más agresivo y difícil de identificar a simple
-vista. En dermatología se emplea la regla **ABCD** (Asimetría, Bordes, Color,
-Diámetro) para señalar lesiones sospechosas, pero aun así hay melanomas que pasan
-desapercibidos. Su incidencia crece de forma sostenida, lo que motiva
-herramientas de cribado y seguimiento asistidas por IA.
+El melanoma es el cáncer de piel más agresivo y difícil de detectar a simple
+vista. Los dermatólogos usan la regla **ABCD** (Asimetría, Bordes, Color,
+Diámetro), pero aun así hay melanomas que pasan desapercibidos.
 
-El objetivo del trabajo es doble:
+El proyecto busca dos cosas:
 
-1. Cuantificar cuánta señal diagnóstica hay en la **forma** de la lesión
-   (enfoque clásico, interpretable).
-2. Entrenar **redes convolucionales** sobre la imagen y estudiar qué
-   representación de entrada generaliza mejor a imágenes nuevas.
+1. Ver cuánta información hay en la **forma** del lunar (enfoque clásico y fácil
+   de interpretar).
+2. Entrenar **redes neuronales** sobre la imagen y comprobar cuál funciona mejor
+   con imágenes nuevas.
 
 ---
 
@@ -65,9 +64,8 @@ distinto:
 | `masks/` | máscara binaria del lunar | Random Forest (vía métricas) |
 | `lesions/` | lesión segmentada sobre fondo negro | SimpleNet |
 
-De la máscara se calculan cinco descriptores de forma —área, perímetro,
-circularidad (`4·π·A / P²`) y simetría vertical y horizontal— que se guardan en un
-CSV.
+De la máscara se calculan cinco medidas de forma: área, perímetro, circularidad
+(`4·π·A / P²`) y simetría vertical y horizontal. Se guardan en un CSV.
 
 ---
 
@@ -85,7 +83,7 @@ varían el número de bloques y la capa final, como se detalla abajo.
 
 ![Arquitectura de la red CNN](docs/img/arquitectura_cnn.jpg)
 
-### 4.1. Random Forest — `notebooks/00_rf_metrics.ipynb`
+### 4.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
 
 Modelo clásico entrenado **solo con los cinco descriptores morfológicos**, sin ver
 la imagen. Sirve para medir cuánta información diagnóstica hay en la pura forma del
@@ -104,7 +102,7 @@ Las variables más influyentes son **perímetro, circularidad y área**. El mode
 llega a 0.72 de accuracy: la forma aporta señal, pero se queda corta (deja pasar
 el 35 % de los melanomas).
 
-### 4.2. ZoomNet — CNN sobre la imagen RGB — `notebooks/01_rgb_grad_cam.ipynb`
+### 4.2. ZoomNet: CNN sobre la imagen RGB (`notebooks/01_rgb_grad_cam.ipynb`)
 
 CNN entrenada desde cero sobre la imagen **RGB con zoom** (224×224×3). Ve la lesión
 **y la piel de alrededor**.
@@ -138,7 +136,7 @@ lesión, no en el fondo:
 
 <img src="docs/img/zoomnet_gradcam.jpg" width="760">
 
-### 4.3. SimpleNet — CNN sobre la lesión segmentada — `notebooks/02_simpleNet.ipynb`
+### 4.3. SimpleNet: CNN sobre la lesión segmentada (`notebooks/02_simpleNet.ipynb`)
 
 CNN **ligera** entrenada sobre la **lesión ya segmentada** (fondo negro), para que
 no pueda aprender ruido del entorno.
@@ -159,7 +157,7 @@ Entrada 224x224x3
 
 ![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
 
-Accuracy 0.81 en test interno —por debajo de ZoomNet— pero con curvas **muy
+Accuracy 0.81 en test interno, por debajo de ZoomNet, pero con curvas **muy
 estables y paralelas**, sin sobreajuste. El notebook incluye también su curva ROC
 y su AUC (celda "Curva ROC").
 
@@ -174,7 +172,7 @@ Prueba sobre 45 imágenes de ISIC, una fuente distinta a la de entrenamiento.
 | ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
 | SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
 
-| ZoomNet — externo | SimpleNet — externo |
+| ZoomNet (externo) | SimpleNet (externo) |
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
