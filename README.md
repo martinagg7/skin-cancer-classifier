@@ -30,34 +30,27 @@ The `data/` and `models/` folders are not committed.
 ## 2. Preprocessing
 
 Before training, every image goes through a cleanup pipeline
-(`src/preprocessing/`, run with `python main.py`) whose goal is to keep only the
-lesion.
+(`src/preprocessing/`, run with `python main.py`) that keeps only the lesion:
+
+1. **Zoom and hair removal.** A center crop brings the lesion closer, and the
+   hairs and the dark dermatoscope border are removed with a black-hat filter
+   plus `inpaint`.
+2. **Saturation channel.** The image is converted to HSV and only the S channel
+   is used, where the pigmented area stands out even with shadows or glare.
+3. **Segmentation.** An Otsu threshold separates lesion from background, giving a
+   clean mask.
 
 ![Analysis pipeline](docs/img/slide_pipeline.jpg)
 
-| Step | What it does | Why |
-|---|---|---|
-| Zoom and hair removal | center crop and removal of hairs (black-hat + `inpaint`) | brings the lesion closer and removes hair and the dermatoscope border |
-| Saturation channel | work on the S channel of the HSV space | the pigmented area stands out there even with shadows or glare |
-| Segmentation | Otsu threshold to separate lesion from background | a clean mask of the lesion |
+This produces three versions of each image: the cropped RGB photo (`zoomed/`,
+used by ZoomNet), the binary mask (`masks/`), and the segmented lesion on a black
+background (`lesions/`, used by SimpleNet).
 
-The result is three versions of each image, one per model:
-
-| Folder | Content | Used by |
-|---|---|---|
-| `zoomed/` | cropped RGB image | ZoomNet |
-| `masks/` | binary mask of the lesion | Random Forest |
-| `lesions/` | segmented lesion on black background | SimpleNet |
-
-From the mask, five shape descriptors are also computed, based on the ABCD rule.
-They are the input to the Random Forest:
-
-| Descriptor | Definition |
-|---|---|
-| Area | pixels in the lesion |
-| Perimeter | length of the contour |
-| Circularity | `4·π·Area / Perimeter²` (1 = circle) |
-| Vertical / horizontal symmetry | overlap of the mask with its reflection about each axis |
+From the mask, five shape descriptors are computed (based on the ABCD rule) and
+fed to the Random Forest: **area** (lesion pixels), **perimeter** (contour
+length), **circularity** (`4·π·Area / Perimeter²`, where 1 is a circle), and
+**vertical and horizontal symmetry** (how well the mask overlaps its reflection
+about each axis).
 
 ---
 
