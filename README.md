@@ -38,9 +38,9 @@ solo con la lesión.
 
 | Paso | Qué hace | Por qué |
 |---|---|---|
-| Zoom y depilado | recorte central al 90 % + eliminación de pelos (black-hat + `inpaint`) | acerca la lesión y quita el vello y el borde del dermatoscopio |
-| Canal S (HSV) | se trabaja sobre el canal de saturación, suavizado con Gauss | la zona pigmentada resalta ahí con independencia de sombras y brillos |
-| Segmentación | umbral de Otsu, se elige la componente conexa central y se rellenan huecos | máscara limpia de la lesión |
+| Zoom y depilado | recorte central y borrado de los pelos (black-hat + `inpaint`) | acerca la lesión y quita el vello y el borde del dermatoscopio |
+| Canal de saturación | se trabaja sobre el canal S del espacio HSV | la zona pigmentada resalta ahí aunque haya sombras o brillos |
+| Segmentación | umbral de Otsu para separar lesión y fondo | máscara limpia de la lesión |
 
 El resultado son tres versiones de cada imagen, una para cada modelo:
 
@@ -64,66 +64,54 @@ lesión, inspirados en la regla ABCD, que son la entrada del Random Forest:
 
 ## 3. Modelos
 
-| Modelo | Entrada | Arquitectura | Accuracy test | Recall melanoma |
-|---|---|---|---|---|
-| Random Forest | 5 descriptores de forma | 400 árboles, prof. 10 | 0.72 | 0.65 |
-| **ZoomNet** | imagen RGB con zoom | CNN, 4 bloques conv + Flatten + densa 256 | **0.89** | 0.86 |
-| **SimpleNet** | lesión segmentada | CNN, 3 bloques conv + global average pooling + densa 128 | 0.81 | 0.70 |
+| Modelo | Entrada | Accuracy test | Recall melanoma |
+|---|---|---|---|
+| Random Forest | 5 descriptores de forma | 0.72 | 0.65 |
+| **ZoomNet** | imagen RGB con zoom | **0.89** | 0.86 |
+| **SimpleNet** | lesión segmentada | 0.81 | 0.70 |
 
 ![Esquema de la arquitectura CNN](docs/img/arquitectura_cnn.jpg)
 
 ### 3.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
 
-Como punto de partida se entrena un Random Forest de 400 árboles usando solo los
-cinco descriptores de forma, sin darle la imagen. La idea es medir cuánto se
-puede clasificar únicamente con la geometría de la lesión, y hacerlo con un
-modelo que se pueda interpretar.
-
-Antes de entrenarlo, en `exploration/00_features.ipynb` se comparan los
-descriptores entre clases: las lesiones malignas tienden a ser menos circulares y
-menos simétricas, aunque con bastante solapamiento entre benignas y malignas.
+Un modelo clásico que usa solo los cinco descriptores de forma, sin ver la
+imagen. Sirve de referencia y es fácil de interpretar. En
+`exploration/00_features.ipynb` se ve que las lesiones malignas tienden a ser
+menos redondas y menos simétricas, aunque con bastante solapamiento.
 
 | Importancia de variables | Matriz de confusión (test) |
 |---|---|
 | <img src="docs/img/rf_feature_importance.png" width="410"> | <img src="docs/img/rf_confusion.png" width="360"> |
 
-Llega al 0.72 de accuracy. Los descriptores que más pesan son el perímetro, la
-circularidad y el área. La forma aporta información, pero no es suficiente: se le
-escapa uno de cada tres melanomas.
+Acierta el 0.72. Pesan sobre todo el perímetro, la circularidad y el área. La
+forma sola no basta: se le escapa uno de cada tres melanomas.
 
 ### 3.2. ZoomNet (`notebooks/01_rgb_grad_cam.ipynb`)
 
-ZoomNet es una red convolucional de cuatro bloques (32, 64, 128 y 256 filtros)
-que recibe la imagen RGB completa, con la piel de alrededor de la lesión. Se
-entrena con Adam y con early stopping y reducción de learning rate; el
-entrenamiento se detiene en la época 23.
+Una red convolucional que recibe la imagen completa del lunar, con la piel de
+alrededor.
 
 ![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
 
-Las curvas de entrenamiento y validación evolucionan juntas, sin señales claras
-de sobreajuste, y el AUC en test es 0.958.
+Entrenamiento y validación van juntas, sin sobreajuste; AUC 0.958.
 
 <img src="docs/img/zoomnet_roc.png" width="360">
 
-Es el modelo que mejor clasifica el test interno (0.89), aunque esa ventaja
-desaparece al probarlo con imágenes de otra fuente (sección 4). Los mapas de
-Grad-CAM muestran que la red se apoya sobre todo en el borde y el interior de la
-lesión, no en el fondo:
+Es la que mejor clasifica el test interno (0.89), pero esa ventaja se pierde con
+imágenes de otra fuente (sección 4). Los mapas de Grad-CAM muestran que se fija
+en el borde y el interior de la lesión, no en el fondo:
 
 <img src="docs/img/zoomnet_gradcam.jpg" width="760">
 
 ### 3.3. SimpleNet (`notebooks/02_simpleNet.ipynb`)
 
-SimpleNet es una versión más ligera: tres bloques convolucionales y un *global
-average pooling* en lugar del `Flatten`, con lo que tiene muchos menos
-parámetros. Además recibe solo la lesión ya segmentada, sin la piel de alrededor,
-para que no pueda aprender nada del contexto. Se entrena igual, con Adam y early
-stopping.
+Una red más ligera que recibe solo la lesión ya recortada, sin la piel de
+alrededor.
 
 ![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
 
-En el test interno alcanza 0.81, algo menos que ZoomNet, pero con unas curvas de
-entrenamiento muy estables. El notebook incluye también su curva ROC.
+En el test interno alcanza 0.81, algo menos que ZoomNet, pero con curvas muy
+estables. El notebook incluye también su curva ROC.
 
 ---
 
