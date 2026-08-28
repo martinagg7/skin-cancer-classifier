@@ -11,8 +11,6 @@ Deployed on Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
 
 You upload a photo of the lesion and it returns the probability of melanoma.
 
----
-
 ## 1. Data
 
 Dermoscopic images labeled as benign (`Benign`) or melanoma (`Malignant`).
@@ -23,8 +21,6 @@ also acts as validation during training. Generalization is checked on a separate
 set of 45 images (22 benign, 23 malignant) from the public **ISIC** archive.
 
 The `data/` and `models/` folders are not committed.
-
----
 
 ## 2. Preprocessing
 
@@ -54,8 +50,6 @@ fed to the Random Forest:
 | Perimeter | length of the contour |
 | Circularity | `4·π·Area / Perimeter²` (1 = perfect circle) |
 | Vertical / horizontal symmetry | how well the mask overlaps its reflection about each axis |
-
----
 
 ## 3. Models
 
@@ -108,8 +102,6 @@ surrounding skin.
 On the internal test it reaches 0.81, slightly below ZoomNet, but with very
 stable curves. The notebook also computes its ROC curve.
 
----
-
 ## 4. External evaluation (ISIC)
 
 To check whether the networks learned something useful beyond the training set,
@@ -129,8 +121,6 @@ ZoomNet collapses to 0.58 and labels almost everything "malignant" (only 5 of 22
 benign lesions correct): trained on the full image, it learned traits specific to
 the training source. SimpleNet, seeing only the cropped lesion, stays balanced at
 0.71. With just 45 images the exact numbers are noisy, but the gap is clear.
-
----
 
 ## 5. Chosen model: SimpleNet
 
