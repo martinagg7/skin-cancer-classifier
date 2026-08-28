@@ -1,23 +1,21 @@
 # Detección de Melanomas
 
-Autora: Martina García González
+El melanoma es el cáncer de piel más agresivo y difícil de detectar a simple
+vista. Los dermatólogos usan la regla **ABCD** (Asimetría, Bordes, Color,
+Diámetro), pero aun así hay melanomas que pasan desapercibidos.
 
 Este proyecto clasifica lesiones de la piel en **benignas** o **melanoma** a
 partir de imágenes dermatoscópicas.
 
-Se prueban tres modelos: un modelo clásico que usa medidas de la forma del lunar
-y dos redes neuronales convolucionales (CNN). El mejor de ellos está publicado
-como demo web.
+## Prueba la aplicación
 
-**Demo:** https://huggingface.co/spaces/Martinagg/DermaScan
+Está desplegada en Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
+
+Subes una foto de la lesión y devuelve la probabilidad de melanoma.
 
 ---
 
-## 1. Motivación
-
-El melanoma es el cáncer de piel más agresivo y difícil de detectar a simple
-vista. Los dermatólogos usan la regla **ABCD** (Asimetría, Bordes, Color,
-Diámetro), pero aun así hay melanomas que pasan desapercibidos.
+## 1. Objetivo
 
 El proyecto busca dos cosas:
 
