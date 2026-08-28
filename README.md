@@ -129,13 +129,10 @@ and under different conditions.
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
-Here ZoomNet drops to 0.58 and becomes heavily biased toward "malignant": it only
-gets 5 of the 22 benign lesions right. Having trained on the full image, it ended
-up picking up traits specific to the original source. SimpleNet, which only sees
-the cropped lesion, behaves in a much more balanced way and stays at 0.71.
-
-It is only 45 images, so the exact percentages should be taken with caution, but
-ZoomNet's drop and its bias toward one class are clear.
+ZoomNet collapses to 0.58 and labels almost everything "malignant" (only 5 of 22
+benign lesions correct): trained on the full image, it learned traits specific to
+the training source. SimpleNet, seeing only the cropped lesion, stays balanced at
+0.71. With just 45 images the exact numbers are noisy, but the gap is clear.
 
 ---
 
@@ -153,45 +150,3 @@ Random Forest and ZoomNet are kept in the repository because the comparison is
 part of the result: they make it clear that lesion shape alone is not enough, and
 that a good number on the internal test does not guarantee that the model works
 on new data.
-
----
-
-## 6. Repository structure
-
-```
-config/              environment check and data download
-src/preprocessing/   zoom, hair removal, segmentation and descriptor computation
-main.py              runs the preprocessing on a folder of images
-exploration/         analysis of the shape descriptors by class
-notebooks/
-  00_rf_metrics.ipynb     Random Forest on the descriptors
-  01_rgb_grad_cam.ipynb   ZoomNet + Grad-CAM
-  02_simpleNet.ipynb      SimpleNet
-reports/             clinical use case and presentation
-docs/img/            figures used in this README
-```
-
----
-
-## 7. Usage
-
-```bash
-pip install -r requirements.txt
-
-# 1. download the data: run config/01_dowload_data.ipynb
-
-# 2. generate zoomed/, masks/, lesions/ and the descriptor CSV
-python main.py
-
-# 3. train and evaluate: run the notebooks in order
-```
-
----
-
-## 8. Future work
-
-A portable Raspberry Pi device (camera and screen) that captures the lesion,
-estimates the probability of melanoma, and sends the result to a cloud platform
-for clinical follow-up.
-
-![Future application and architecture](docs/img/slide_futuro.jpg)
