@@ -46,10 +46,14 @@ used by ZoomNet), the binary mask (`masks/`), and the segmented lesion on a blac
 background (`lesions/`, used by SimpleNet).
 
 From the mask, five shape descriptors are computed (based on the ABCD rule) and
-fed to the Random Forest: **area** (lesion pixels), **perimeter** (contour
-length), **circularity** (`4·π·Area / Perimeter²`, where 1 is a circle), and
-**vertical and horizontal symmetry** (how well the mask overlaps its reflection
-about each axis).
+fed to the Random Forest:
+
+| Descriptor | What it measures |
+|---|---|
+| Area | pixels in the lesion |
+| Perimeter | length of the contour |
+| Circularity | `4·π·Area / Perimeter²` (1 = perfect circle) |
+| Vertical / horizontal symmetry | how well the mask overlaps its reflection about each axis |
 
 ---
 
