@@ -15,35 +15,22 @@ Subes una foto de la lesión y devuelve la probabilidad de melanoma.
 
 ---
 
-## 1. Objetivo
+## 1. Datos
 
-Comparar dos maneras de decidir si un lunar es benigno o melanoma:
+Imágenes dermatoscópicas etiquetadas como benignas (`Benign`) o melanoma
+(`Malignant`).
 
-1. **Usando solo la forma del lunar.** Se miden características geométricas (área,
-   perímetro, lo redondo que es, si es simétrico) y un modelo sencillo decide con
-   esos números. Ventaja: se entiende por qué toma cada decisión.
-2. **Usando la imagen completa.** Una red neuronal aprende directamente de las
-   fotos, sin que nadie le diga qué mirar. Se prueban dos redes y se comprueba
-   cuál acierta mejor con imágenes que no ha visto nunca.
+| Conjunto | Imágenes | De dónde salen | Para qué |
+|---|---|---|---|
+| Entrenamiento | ~11.900 | se descargan con `config/01_dowload_data.ipynb` | ajustar los modelos |
+| Test | 2.000 (1.000 por clase) | misma fuente | evaluar y validar durante el entrenamiento |
+| Externo | 45 (22 benignas / 23 malignas) | archivo público **ISIC** | comprobar si funcionan con imágenes de otro origen |
 
----
-
-## 2. Datos
-
-Imágenes dermatoscópicas etiquetadas en dos clases (`Benign`, `Malignant`).
-
-| Conjunto | Imágenes | Uso |
-|---|---|---|
-| Entrenamiento | ~11.900 | ajuste de los modelos |
-| Test interno | 2.000 (1.000 por clase) | evaluación y validación durante el entrenamiento |
-| Externo (ISIC) | 45 (22 benignas / 23 malignas) | prueba de generalización a otra fuente |
-
-El dataset se descarga con `config/01_dowload_data.ipynb`. Las carpetas `data/` y
-`models/` no se versionan.
+Las carpetas `data/` y `models/` no se suben al repositorio.
 
 ---
 
-## 3. Pipeline de preprocesado
+## 2. Preprocesado y características
 
 Todo el preprocesado está en `src/preprocessing/` y se lanza con `python main.py`.
 
@@ -51,25 +38,35 @@ Todo el preprocesado está en `src/preprocessing/` y se lanza con `python main.p
 
 | Paso | Qué hace | Por qué |
 |---|---|---|
-| **Zoom + limpieza** | recorte central al 90 % y eliminación de pelos (black-hat + `inpaint`) | centra la lesión y elimina bordes del dermatoscopio y vello que la ocultan |
-| **Espacio HSV** | se toma el canal de saturación (S) y se suaviza | resalta la zona pigmentada con independencia del ruido de la imagen |
-| **Máscara final** | umbral de Otsu, selección de la componente conexa central y relleno de huecos | separa la lesión del fondo |
+| **Zoom + limpieza** | recorte central al 90 % y eliminación de pelos (black-hat + `inpaint`) | centra la lesión y quita bordes del dermatoscopio y vello que la tapan |
+| **Espacio HSV** | se coge el canal de saturación (S) y se suaviza | marca bien la zona con pigmento aunque la imagen tenga ruido |
+| **Máscara final** | umbral de Otsu, se coge la mancha central y se rellenan huecos | separa la lesión del fondo |
 
-De aquí salen tres representaciones de cada imagen, cada una alimenta a un modelo
-distinto:
+De aquí salen tres versiones de cada imagen, cada una para un modelo:
 
-| Salida | Contenido | La usa |
+| Salida | Qué es | La usa |
 |---|---|---|
-| `zoomed/` | imagen RGB recortada | ZoomNet |
-| `masks/` | máscara binaria del lunar | Random Forest (vía métricas) |
-| `lesions/` | lesión segmentada sobre fondo negro | SimpleNet |
+| `zoomed/` | imagen a color recortada | ZoomNet |
+| `masks/` | silueta del lunar en blanco y negro | Random Forest (a través de las medidas) |
+| `lesions/` | el lunar recortado sobre fondo negro | SimpleNet |
 
-De la máscara se calculan cinco medidas de forma: área, perímetro, circularidad
-(`4·π·A / P²`) y simetría vertical y horizontal. Se guardan en un CSV.
+### Características de forma
+
+De la silueta del lunar se calculan cinco números, inspirados en la regla ABCD:
+
+| Característica | Qué mide |
+|---|---|
+| Área | tamaño del lunar (en píxeles) |
+| Perímetro | longitud del borde; es mayor cuando el borde es irregular |
+| Circularidad (`4·π·A / P²`) | cómo de redondo es (1 = círculo perfecto) |
+| Simetría vertical | parecido entre la mitad izquierda y la derecha |
+| Simetría horizontal | parecido entre la mitad de arriba y la de abajo |
+
+Se guardan en un CSV y son la entrada del Random Forest.
 
 ---
 
-## 4. Modelos planteados
+## 3. Modelos planteados
 
 | Modelo | Entrada | Idea | Accuracy test | Recall melanoma |
 |---|---|---|---|---|
@@ -83,7 +80,7 @@ varían el número de bloques y la capa final, como se detalla abajo.
 
 ![Arquitectura de la red CNN](docs/img/arquitectura_cnn.jpg)
 
-### 4.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
+### 3.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
 
 Modelo clásico entrenado **solo con los cinco descriptores morfológicos**, sin ver
 la imagen. Sirve para medir cuánta información diagnóstica hay en la pura forma del
@@ -102,7 +99,7 @@ Las variables más influyentes son **perímetro, circularidad y área**. El mode
 llega a 0.72 de accuracy: la forma aporta señal, pero se queda corta (deja pasar
 el 35 % de los melanomas).
 
-### 4.2. ZoomNet: CNN sobre la imagen RGB (`notebooks/01_rgb_grad_cam.ipynb`)
+### 3.2. ZoomNet: CNN sobre la imagen RGB (`notebooks/01_rgb_grad_cam.ipynb`)
 
 CNN entrenada desde cero sobre la imagen **RGB con zoom** (224×224×3). Ve la lesión
 **y la piel de alrededor**.
@@ -128,7 +125,7 @@ Optimizador Adam (lr 1e-3), `categorical_crossentropy`, con `EarlyStopping` y
 
 Es el **mejor modelo en test interno**: accuracy 0.89 y AUC 0.958, con curvas de
 entrenamiento y validación que van juntas. Esa ventaja, sin embargo, no se
-mantiene con imágenes de otra fuente (sección 5).
+mantiene con imágenes de otra fuente (sección 4).
 
 **Grad-CAM.** Para comprobar en qué se fija la red se generan mapas de calor sobre
 la última capa convolucional. La red se centra en el borde y el interior de la
@@ -136,7 +133,7 @@ lesión, no en el fondo:
 
 <img src="docs/img/zoomnet_gradcam.jpg" width="760">
 
-### 4.3. SimpleNet: CNN sobre la lesión segmentada (`notebooks/02_simpleNet.ipynb`)
+### 3.3. SimpleNet: CNN sobre la lesión segmentada (`notebooks/02_simpleNet.ipynb`)
 
 CNN **ligera** entrenada sobre la **lesión ya segmentada** (fondo negro), para que
 no pueda aprender ruido del entorno.
@@ -163,7 +160,7 @@ y su AUC (celda "Curva ROC").
 
 ---
 
-## 5. Evaluación en datos externos (ISIC)
+## 4. Evaluación en datos externos (ISIC)
 
 Prueba sobre 45 imágenes de ISIC, una fuente distinta a la de entrenamiento.
 
@@ -183,7 +180,7 @@ equilibrado (0.71) con datos nuevos.
 
 ---
 
-## 6. Modelo elegido: SimpleNet
+## 5. Modelo elegido: SimpleNet
 
 Se despliega **SimpleNet** en la demo [DermaScan](https://huggingface.co/spaces/Martinagg/DermaScan):
 
@@ -200,7 +197,7 @@ y que la forma por sí sola no basta.
 
 ---
 
-## 7. Estructura del repositorio
+## 6. Estructura del repositorio
 
 ```
 config/              comprobación del entorno y descarga del dataset
@@ -217,7 +214,7 @@ docs/img/            figuras usadas en este README
 
 ---
 
-## 8. Uso
+## 7. Uso
 
 ```bash
 pip install -r requirements.txt
@@ -234,7 +231,7 @@ python main.py
 
 ---
 
-## 9. Trabajo futuro
+## 8. Trabajo futuro
 
 Dispositivo portátil basado en Raspberry Pi (cámara y pantalla táctil) que captura
 la lesión, estima la probabilidad de melanoma y sincroniza los resultados con una
