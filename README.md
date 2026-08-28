@@ -128,7 +128,8 @@ Optimizador Adam (lr 1e-3), `categorical_crossentropy`, con `EarlyStopping` y
 | <img src="docs/img/zoomnet_roc.png" width="340"> | <img src="docs/img/zoomnet_confusion.png" width="380"> |
 
 Es el **mejor modelo en test interno**: accuracy 0.89 y AUC 0.958, con curvas de
-entrenamiento y validación que van juntas.
+entrenamiento y validación que van juntas. Esa ventaja, sin embargo, no se
+mantiene con imágenes de otra fuente (sección 5).
 
 **Grad-CAM.** Para comprobar en qué se fija la red se generan mapas de calor sobre
 la última capa convolucional. La red se centra en el borde y el interior de la
@@ -166,8 +167,10 @@ estables y paralelas**, sin sobreajuste.
 
 ## 5. Evaluación en datos externos (ISIC)
 
-Cada CNN se prueba sobre 45 imágenes de una fuente distinta a la de entrenamiento.
-Aquí es donde se ven las diferencias reales:
+Las particiones internas (train y test) proceden de la misma fuente: mismos
+dispositivos, iluminación y procesado. El conjunto ISIC (45 imágenes) viene de
+otros equipos, otros pacientes y otras condiciones de captura. Es la prueba de si
+los modelos han aprendido a reconocer lesiones o solo a reconocer *este* dataset.
 
 | Modelo | Accuracy externo | Recall melanoma | Recall benigno |
 |---|---|---|---|
@@ -178,13 +181,32 @@ Aquí es donde se ven las diferencias reales:
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
-ZoomNet, que era el mejor en test interno, **se desploma**: clasifica casi todo
-como maligno (solo acierta 5 de 22 lesiones benignas). Su alto recall de melanoma
-externo es engañoso, porque viene de un sesgo hacia "maligno", no de haber
-aprendido a distinguir.
+**ZoomNet se desploma** (0.89 → 0.58) y de forma sesgada: clasifica como maligno
+casi todo lo que ve (21 de 23 melanomas, pero solo 5 de 22 lesiones benignas). Su
+recall de melanoma alto es engañoso, porque no viene de distinguir bien sino de
+un sesgo hacia una clase.
 
-SimpleNet mantiene un comportamiento **equilibrado y consistente** con datos que
-no ha visto.
+### ¿Por qué pasa esto y por qué tiene sentido?
+
+- ZoomNet recibe la imagen RGB completa, con piel y bordes del dermatoscopio.
+  Entrenada desde cero con ~12.000 imágenes de una sola fuente, aprende junto con
+  la lesión "atajos" propios de esa fuente (calibración de color, viñeteado,
+  encuadre, resolución) que no valen para imágenes de otro origen.
+- Al cambiar la distribución de entrada, la frontera de decisión —ajustada a la
+  fuente interna— se desplaza de forma sistemática hacia una clase.
+- Además, el test interno se usó también como validación (early stopping), por lo
+  que su 0.89 ya era algo optimista incluso dentro de su propia distribución.
+
+**SimpleNet aguanta mejor** (0.71, con 13/22 y 19/23) porque solo ve la lesión
+segmentada: al haber quitado el fondo, no puede apoyarse en esos atajos de
+contexto. La segmentación funciona como una normalización entre fuentes. Además
+es más pequeña, con menos capacidad de sobreajuste.
+
+**Matices:** son solo 45 imágenes, así que las cifras exactas tienen un margen
+amplio; lo que sí es claro es el efecto (caída grande y sesgo a una clase).
+ZoomNet y SimpleNet se diferencian en tres cosas a la vez —entrada, profundidad y
+capa final—, por lo que la mejora no se puede atribuir solo a la segmentación sin
+un experimento controlado.
 
 ---
 
