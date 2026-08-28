@@ -79,6 +79,12 @@ CSV.
 | **ZoomNet** | imagen RGB con zoom | CNN que ve la lesión y su entorno | **0.89** | 0.86 | **0.96** |
 | **SimpleNet** | lesión segmentada | CNN ligera, solo la lesión | 0.81 | 0.70 | — |
 
+Esquema general de las dos CNN: bloques de convolución + pooling para extraer
+características y capas densas + softmax para clasificar. ZoomNet y SimpleNet
+varían el número de bloques y la capa final, como se detalla abajo.
+
+![Arquitectura de la red CNN](docs/img/arquitectura_cnn.jpg)
+
 ### 4.1. Random Forest — `notebooks/00_rf_metrics.ipynb`
 
 Modelo clásico entrenado **solo con los cinco descriptores morfológicos**, sin ver
@@ -89,11 +95,6 @@ lunar.
 - Antes se hace un análisis exploratorio de cada descriptor por clase
   (`exploration/00_features.ipynb`): las lesiones malignas tienden a ser menos
   circulares y menos simétricas.
-
-<p>
-  <img src="docs/img/feat_circularidad_boxplot.png" width="360">
-  <img src="docs/img/feat_simetria_boxplot.png" width="430">
-</p>
 
 | Importancia de variables | Matriz de confusión (test) |
 |---|---|
@@ -123,9 +124,9 @@ Optimizador Adam (lr 1e-3), `categorical_crossentropy`, con `EarlyStopping` y
 
 ![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
 
-| Curva ROC (test) | Matriz de confusión (test) |
-|---|---|
-| <img src="docs/img/zoomnet_roc.png" width="340"> | <img src="docs/img/zoomnet_confusion.png" width="380"> |
+**Curva ROC (test):**
+
+<img src="docs/img/zoomnet_roc.png" width="360">
 
 Es el **mejor modelo en test interno**: accuracy 0.89 y AUC 0.958, con curvas de
 entrenamiento y validación que van juntas. Esa ventaja, sin embargo, no se
@@ -157,8 +158,6 @@ Entrada 224x224x3
 **Curvas de entrenamiento y validación** (salida directa del notebook):
 
 ![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
-
-<img src="docs/img/simplenet_confusion.png" width="380">
 
 Accuracy 0.81 en test interno —por debajo de ZoomNet— pero con curvas **muy
 estables y paralelas**, sin sobreajuste.
