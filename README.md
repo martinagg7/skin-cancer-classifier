@@ -1,198 +1,197 @@
-# Detección de Melanomas
+# Melanoma Detection
 
-Clasificación de lesiones dermatoscópicas en **benignas** o **melanoma**. Para
-hacerlo se prueban y se comparan tres enfoques: un modelo clásico que trabaja con
-descriptores de la forma de la lesión y dos redes convolucionales que reciben la
-imagen de distinta manera.
+Classification of dermoscopic skin lesions as **benign** or **melanoma**. Three
+approaches are built and compared: a classic model that works with shape
+descriptors of the lesion, and two convolutional networks that receive the image
+in different ways.
 
-## Prueba la aplicación
+## Try the app
 
-Desplegada en Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
+Deployed on Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
 
-Subes una foto del lunar y devuelve la probabilidad de melanoma.
+You upload a photo of the lesion and it returns the probability of melanoma.
 
 ---
 
-## 1. Datos
+## 1. Data
 
-Fotos dermatoscópicas etiquetadas como benignas (`Benign`) o melanoma
-(`Malignant`).
+Dermoscopic images labeled as benign (`Benign`) or melanoma (`Malignant`).
 
-| Conjunto | Imágenes | Origen | Uso |
+| Set | Images | Source | Use |
 |---|---|---|---|
-| Entrenamiento | ~11.900 | descarga en `config/01_dowload_data.ipynb` | ajuste de los modelos |
-| Test | 2.000 (1.000 por clase) | misma fuente | evaluación; también sirve de validación durante el entrenamiento |
-| Externo | 45 (22 benignas / 23 malignas) | archivo público **ISIC** | prueba de generalización a otra fuente |
+| Training | ~11,900 | downloaded by `config/01_dowload_data.ipynb` | fitting the models |
+| Test | 2,000 (1,000 per class) | same source | evaluation; also used for validation during training |
+| External | 45 (22 benign / 23 malignant) | public **ISIC** archive | check generalization to another source |
 
-Las carpetas `data/` y `models/` no se suben al repositorio.
+The `data/` and `models/` folders are not committed.
 
 ---
 
-## 2. Preprocesado
+## 2. Preprocessing
 
-Antes de entrenar, cada imagen pasa por un pipeline de limpieza
-(`src/preprocessing/`, se ejecuta con `python main.py`) cuyo objetivo es quedarse
-solo con la lesión.
+Before training, every image goes through a cleanup pipeline
+(`src/preprocessing/`, run with `python main.py`) whose goal is to keep only the
+lesion.
 
-![Pipeline de análisis](docs/img/slide_pipeline.jpg)
+![Analysis pipeline](docs/img/slide_pipeline.jpg)
 
-| Paso | Qué hace | Por qué |
+| Step | What it does | Why |
 |---|---|---|
-| Zoom y depilado | recorte central y borrado de los pelos (black-hat + `inpaint`) | acerca la lesión y quita el vello y el borde del dermatoscopio |
-| Canal de saturación | se trabaja sobre el canal S del espacio HSV | la zona pigmentada resalta ahí aunque haya sombras o brillos |
-| Segmentación | umbral de Otsu para separar lesión y fondo | máscara limpia de la lesión |
+| Zoom and hair removal | center crop and removal of hairs (black-hat + `inpaint`) | brings the lesion closer and removes hair and the dermatoscope border |
+| Saturation channel | work on the S channel of the HSV space | the pigmented area stands out there even with shadows or glare |
+| Segmentation | Otsu threshold to separate lesion from background | a clean mask of the lesion |
 
-El resultado son tres versiones de cada imagen, una para cada modelo:
+The result is three versions of each image, one per model:
 
-| Carpeta | Contenido | La usa |
+| Folder | Content | Used by |
 |---|---|---|
-| `zoomed/` | imagen RGB recortada | ZoomNet |
-| `masks/` | máscara binaria de la lesión | Random Forest |
-| `lesions/` | lesión segmentada sobre fondo negro | SimpleNet |
+| `zoomed/` | cropped RGB image | ZoomNet |
+| `masks/` | binary mask of the lesion | Random Forest |
+| `lesions/` | segmented lesion on black background | SimpleNet |
 
-A partir de la máscara se calculan además cinco descriptores de la forma de la
-lesión, inspirados en la regla ABCD, que son la entrada del Random Forest:
+From the mask, five shape descriptors are also computed, based on the ABCD rule.
+They are the input to the Random Forest:
 
-| Descriptor | Definición |
+| Descriptor | Definition |
 |---|---|
-| Área | píxeles de la lesión |
-| Perímetro | longitud del contorno |
-| Circularidad | `4·π·Área / Perímetro²` (1 = círculo) |
-| Simetría vertical / horizontal | solapamiento de la máscara con su reflejo respecto a cada eje |
+| Area | pixels in the lesion |
+| Perimeter | length of the contour |
+| Circularity | `4·π·Area / Perimeter²` (1 = circle) |
+| Vertical / horizontal symmetry | overlap of the mask with its reflection about each axis |
 
 ---
 
-## 3. Modelos
+## 3. Models
 
-| Modelo | Entrada | Accuracy test | Recall melanoma |
+| Model | Input | Test accuracy | Melanoma recall |
 |---|---|---|---|
-| Random Forest | 5 descriptores de forma | 0.72 | 0.65 |
-| **ZoomNet** | imagen RGB con zoom | **0.89** | 0.86 |
-| **SimpleNet** | lesión segmentada | 0.81 | 0.70 |
+| Random Forest | 5 shape descriptors | 0.72 | 0.65 |
+| **ZoomNet** | zoomed RGB image | **0.89** | 0.86 |
+| **SimpleNet** | segmented lesion | 0.81 | 0.70 |
 
-![Esquema de la arquitectura CNN](docs/img/arquitectura_cnn.jpg)
+![CNN architecture overview](docs/img/arquitectura_cnn.jpg)
 
 ### 3.1. Random Forest (`notebooks/00_rf_metrics.ipynb`)
 
-Un modelo clásico que usa solo los cinco descriptores de forma, sin ver la
-imagen. Sirve de referencia y es fácil de interpretar. En
-`exploration/00_features.ipynb` se ve que las lesiones malignas tienden a ser
-menos redondas y menos simétricas, aunque con bastante solapamiento.
+A classic model that uses only the five shape descriptors, without seeing the
+image. It serves as a baseline and is easy to interpret. In
+`exploration/00_features.ipynb` you can see that malignant lesions tend to be
+less round and less symmetric, though with considerable overlap.
 
-| Importancia de variables | Matriz de confusión (test) |
+| Feature importance | Confusion matrix (test) |
 |---|---|
 | <img src="docs/img/rf_feature_importance.png" width="410"> | <img src="docs/img/rf_confusion.png" width="360"> |
 
-Acierta el 0.72. Pesan sobre todo el perímetro, la circularidad y el área. La
-forma sola no basta: se le escapa uno de cada tres melanomas.
+It reaches 0.72. Perimeter, circularity and area weigh the most. Shape alone is
+not enough: it misses one in three melanomas.
 
 ### 3.2. ZoomNet (`notebooks/01_rgb_grad_cam.ipynb`)
 
-Una red convolucional que recibe la imagen completa del lunar, con la piel de
-alrededor.
+A convolutional network that receives the full image of the lesion, with the
+surrounding skin.
 
-![Curvas de entrenamiento de ZoomNet](docs/img/zoomnet_curvas.png)
+![ZoomNet training curves](docs/img/zoomnet_curvas.png)
 
-Entrenamiento y validación van juntas, sin sobreajuste; AUC 0.958.
+Training and validation move together, no overfitting; AUC 0.958.
 
 <img src="docs/img/zoomnet_roc.png" width="360">
 
-Es la que mejor clasifica el test interno (0.89), pero esa ventaja se pierde con
-imágenes de otra fuente (sección 4). Los mapas de Grad-CAM muestran que se fija
-en el borde y el interior de la lesión, no en el fondo:
+It is the best on the internal test (0.89), but that advantage is lost on images
+from another source (section 4). The Grad-CAM maps show that it focuses on the
+edge and interior of the lesion, not on the background:
 
 <img src="docs/img/zoomnet_gradcam.jpg" width="760">
 
 ### 3.3. SimpleNet (`notebooks/02_simpleNet.ipynb`)
 
-Una red más ligera que recibe solo la lesión ya recortada, sin la piel de
-alrededor.
+A lighter network that receives only the already cropped lesion, without the
+surrounding skin.
 
-![Curvas de entrenamiento de SimpleNet](docs/img/simplenet_curvas.png)
+![SimpleNet training curves](docs/img/simplenet_curvas.png)
 
-En el test interno alcanza 0.81, algo menos que ZoomNet, pero con curvas muy
-estables. El notebook incluye también su curva ROC.
+On the internal test it reaches 0.81, slightly below ZoomNet, but with very
+stable curves. The notebook also computes its ROC curve.
 
 ---
 
-## 4. Evaluación externa (ISIC)
+## 4. External evaluation (ISIC)
 
-Para comprobar si las redes han aprendido algo que sirva más allá del conjunto de
-entrenamiento, se prueban con 45 imágenes del archivo ISIC, tomadas con otros
-equipos y en otras condiciones.
+To check whether the networks learned something useful beyond the training set,
+they are tested on 45 images from the ISIC archive, taken with different devices
+and under different conditions.
 
-| Modelo | Accuracy | Recall melanoma | Recall benigno |
+| Model | Accuracy | Melanoma recall | Benign recall |
 |---|---|---|---|
 | ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
 | SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
 
-| ZoomNet (externo) | SimpleNet (externo) |
+| ZoomNet (external) | SimpleNet (external) |
 |---|---|
 | <img src="docs/img/zoomnet_confusion_externo.png" width="360"> | <img src="docs/img/simplenet_confusion_externo.png" width="330"> |
 
-Aquí ZoomNet cae hasta 0.58 y se vuelve muy sesgada hacia "maligno": solo acierta
-5 de las 22 lesiones benignas. Al haberse entrenado sobre la imagen completa, ha
-acabado fijándose también en rasgos propios de la fuente original. SimpleNet, que
-solo ve la lesión recortada, se comporta de forma mucho más equilibrada y
-mantiene un 0.71.
+Here ZoomNet drops to 0.58 and becomes heavily biased toward "malignant": it only
+gets 5 of the 22 benign lesions right. Having trained on the full image, it ended
+up picking up traits specific to the original source. SimpleNet, which only sees
+the cropped lesion, behaves in a much more balanced way and stays at 0.71.
 
-Son solo 45 imágenes, así que los porcentajes concretos hay que tomarlos con
-cautela, pero la caída de ZoomNet y su sesgo hacia una clase se ven con claridad.
-
----
-
-## 5. Modelo elegido: SimpleNet
-
-SimpleNet es el modelo que se ha llevado a la demo, por tres motivos:
-
-- Generaliza mejor a la fuente externa (0.71 frente a 0.58) sin decantarse
-  siempre por la misma clase.
-- Entrena de forma estable, sin sobreajuste.
-- Es ligero, lo que facilita usarlo en la demo y en el dispositivo futuro.
-
-Random Forest y ZoomNet se mantienen en el repositorio porque la comparación es
-parte del resultado: dejan claro que la forma de la lesión por sí sola no basta y
-que un buen número en el test interno no garantiza que el modelo funcione con
-datos nuevos.
+It is only 45 images, so the exact percentages should be taken with caution, but
+ZoomNet's drop and its bias toward one class are clear.
 
 ---
 
-## 6. Estructura del repositorio
+## 5. Chosen model: SimpleNet
+
+SimpleNet is the model taken to the demo, for three reasons:
+
+- It generalizes better to the external source (0.71 vs 0.58) without always
+  leaning toward the same class.
+- It trains in a stable way, without overfitting.
+- It is lightweight, which makes it easy to use in the demo and in the future
+  device.
+
+Random Forest and ZoomNet are kept in the repository because the comparison is
+part of the result: they make it clear that lesion shape alone is not enough, and
+that a good number on the internal test does not guarantee that the model works
+on new data.
+
+---
+
+## 6. Repository structure
 
 ```
-config/              comprobación del entorno y descarga de los datos
-src/preprocessing/   zoom, depilado, segmentación y cálculo de descriptores
-main.py              lanza el preprocesado sobre una carpeta de imágenes
-exploration/         análisis de los descriptores de forma por clase
+config/              environment check and data download
+src/preprocessing/   zoom, hair removal, segmentation and descriptor computation
+main.py              runs the preprocessing on a folder of images
+exploration/         analysis of the shape descriptors by class
 notebooks/
-  00_rf_metrics.ipynb     Random Forest sobre los descriptores
+  00_rf_metrics.ipynb     Random Forest on the descriptors
   01_rgb_grad_cam.ipynb   ZoomNet + Grad-CAM
   02_simpleNet.ipynb      SimpleNet
-reports/             caso de uso clínico y presentación
-docs/img/            figuras de este README
+reports/             clinical use case and presentation
+docs/img/            figures used in this README
 ```
 
 ---
 
-## 7. Uso
+## 7. Usage
 
 ```bash
 pip install -r requirements.txt
 
-# 1. descargar los datos: ejecutar config/01_dowload_data.ipynb
+# 1. download the data: run config/01_dowload_data.ipynb
 
-# 2. generar zoomed/, masks/, lesions/ y el CSV de descriptores
+# 2. generate zoomed/, masks/, lesions/ and the descriptor CSV
 python main.py
 
-# 3. entrenar y evaluar: ejecutar los notebooks en orden
+# 3. train and evaluate: run the notebooks in order
 ```
 
 ---
 
-## 8. Trabajo futuro
+## 8. Future work
 
-Dispositivo portátil basado en Raspberry Pi (cámara y pantalla) que captura la
-lesión, estima la probabilidad de melanoma y envía el resultado a una plataforma
-en la nube para el seguimiento clínico.
+A portable Raspberry Pi device (camera and screen) that captures the lesion,
+estimates the probability of melanoma, and sends the result to a cloud platform
+for clinical follow-up.
 
-![Aplicación futura y arquitectura](docs/img/slide_futuro.jpg)
+![Future application and architecture](docs/img/slide_futuro.jpg)
