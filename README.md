@@ -5,22 +5,6 @@ approaches are built and compared: a classic model that works with shape
 descriptors of the lesion, and two convolutional networks that receive the image
 in different ways.
 
-## Try the app
-
-Deployed on Hugging Face: **https://huggingface.co/spaces/Martinagg/DermaScan**
-
-You upload a photo of the lesion and it returns the probability of melanoma.
-
-## 1. Data
-
-Dermoscopic images labeled as benign (`Benign`) or melanoma (`Malignant`).
-
-Training uses about 11,900 images, with a balanced test set of 2,000 (1,000 per
-class); both are downloaded by `config/01_dowload_data.ipynb`, and the test set
-also acts as validation during training. Generalization is checked on a separate
-set of 45 images (22 benign, 23 malignant) from the public **ISIC** archive.
-
-The `data/` and `models/` folders are not committed.
 
 ## 2. Preprocessing
 
