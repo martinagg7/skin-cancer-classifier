@@ -86,37 +86,6 @@ surrounding skin.
 On the internal test it reaches 0.81, slightly below ZoomNet, but with very
 stable curves. The notebook also computes its ROC curve.
 
-## 4. External evaluation (ISIC)
 
-To check whether the networks learned something useful beyond the training set,
-they are tested on 45 images from the ISIC archive, taken with different devices
-and under different conditions.
 
-| Model | Accuracy | Melanoma recall | Benign recall |
-|---|---|---|---|
-| ZoomNet | 0.58 | 0.91 (21/23) | **0.23 (5/22)** |
-| SimpleNet | **0.71** | 0.83 (19/23) | 0.59 (13/22) |
 
-<img src="docs/img/zoomnet_confusion_externo.png" width="380">
-
-<img src="docs/img/simplenet_confusion_externo.png" width="360">
-
-ZoomNet collapses to 0.58 and labels almost everything "malignant" (only 5 of 22
-benign lesions correct): trained on the full image, it learned traits specific to
-the training source. SimpleNet, seeing only the cropped lesion, stays balanced at
-0.71. With just 45 images the exact numbers are noisy, but the gap is clear.
-
-## 5. Chosen model: SimpleNet
-
-SimpleNet is the model taken to the demo, for three reasons:
-
-- It generalizes better to the external source (0.71 vs 0.58) without always
-  leaning toward the same class.
-- It trains in a stable way, without overfitting.
-- It is lightweight, which makes it easy to use in the demo and in the future
-  device.
-
-Random Forest and ZoomNet are kept in the repository because the comparison is
-part of the result: they make it clear that lesion shape alone is not enough, and
-that a good number on the internal test does not guarantee that the model works
-on new data.
