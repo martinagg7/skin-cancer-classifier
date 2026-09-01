@@ -54,7 +54,6 @@ less round and less symmetric, though with considerable overlap.
 
 <img src="docs/img/rf_feature_importance.png" width="440">
 
-<img src="docs/img/rf_confusion.png" width="380">
 
 It reaches 0.72. Perimeter, circularity and area weigh the most. Shape alone is
 not enough: it misses one in three melanomas.
