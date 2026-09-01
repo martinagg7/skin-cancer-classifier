@@ -65,9 +65,6 @@ surrounding skin.
 
 ![ZoomNet training curves](docs/img/zoomnet_curvas.png)
 
-Training and validation move together, no overfitting; AUC 0.958.
-
-<img src="docs/img/zoomnet_roc.png" width="360">
 
 It is the best on the internal test (0.89), but that advantage is lost on images
 from another source (section 4). The Grad-CAM maps show that it focuses on the
